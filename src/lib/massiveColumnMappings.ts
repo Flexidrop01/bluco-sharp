@@ -1,6 +1,65 @@
 // Extended universal column mappings for massive file processing
 // Handles any Amazon report format from any marketplace - SPANISH & MULTI-LANGUAGE SUPPORT
 
+/**
+ * CLASIFICACIÓN OFICIAL DE COLUMNAS AMAZON - BASADO EN DATOS REALES
+ * 
+ * INGRESOS (valores positivos = suman):
+ * - ventas de productos
+ * - impuesto de ventas de productos  
+ * - abonos de envío
+ * - impuestos por abonos de envío
+ * - abonos de envoltorio para regalo
+ * - impuestos por abonos de envoltorio para regalo
+ * - devoluciones promocionales (NEGATIVO = descuento)
+ * - impuestos de descuentos por promociones
+ * - impuesto retenido en el sitio web
+ * 
+ * GASTOS (valores negativos = restan):
+ * - tarifas de venta
+ * - tarifas de Logística de Amazon
+ * - tarifas de otras transacciones
+ * - otro
+ */
+
+// Columnas que son INGRESOS (revenue)
+export const INCOME_COLUMNS = [
+  'ventas de productos',
+  'product sales',
+  'impuesto de ventas de productos',
+  'product sales tax',
+  'abonos de envío',
+  'shipping credits',
+  'impuestos por abonos de envío',
+  'shipping credits tax',
+  'abonos de envoltorio para regalo',
+  'giftwrap credits',
+  'impuestos por abonos de envoltorio para regalo',
+  'giftwrap credits tax',
+  'impuesto retenido en el sitio web',
+  'marketplace withheld tax'
+];
+
+// Columnas que son GASTOS (expenses) - valores negativos
+export const EXPENSE_COLUMNS = [
+  'tarifas de venta',
+  'selling fees',
+  'tarifas de logística de amazon',
+  'fba fees',
+  'tarifas de otras transacciones',
+  'other transaction fees',
+  'otro',
+  'other'
+];
+
+// Columnas que son DESCUENTOS (restan de ingresos)
+export const DISCOUNT_COLUMNS = [
+  'devoluciones promocionales',
+  'promotional rebates',
+  'impuestos de descuentos por promociones',
+  'promotional rebates tax'
+];
+
 export const UNIVERSAL_COLUMN_MAP: Record<string, string[]> = {
   // === IDENTIFIERS ===
   date: [
