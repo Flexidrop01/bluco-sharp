@@ -93,13 +93,9 @@ const MultiDashboard = ({ analysis, rawMetrics, plResult, ceoBrainPL, onReset }:
       {/* Global Summary Metrics */}
       <GlobalSummary global={analysis.global} fileCount={analysis.fileCount} />
 
-      {/* Main Tabs - SIMPLIFICADO sin pestañas redundantes */}
-      <Tabs defaultValue="transactions" className="space-y-4">
+      {/* Main Tabs */}
+      <Tabs defaultValue="countries" className="space-y-4">
         <TabsList className="glass-card p-1 w-full justify-start overflow-x-auto flex-wrap">
-          <TabsTrigger value="transactions" className="flex items-center gap-2">
-            <Receipt className="w-4 h-4" />
-            <span className="hidden sm:inline">Transacciones</span>
-          </TabsTrigger>
           <TabsTrigger value="countries" className="flex items-center gap-2">
             <Globe className="w-4 h-4" />
             <span className="hidden sm:inline">Por País</span>
@@ -108,6 +104,10 @@ const MultiDashboard = ({ analysis, rawMetrics, plResult, ceoBrainPL, onReset }:
             <MapPin className="w-4 h-4" />
             <span className="hidden sm:inline">Demográfico</span>
           </TabsTrigger>
+          <TabsTrigger value="transactions" className="flex items-center gap-2">
+            <Receipt className="w-4 h-4" />
+            <span className="hidden sm:inline">Transacciones</span>
+          </TabsTrigger>
           <TabsTrigger value="skus" className="flex items-center gap-2">
             <Package className="w-4 h-4" />
             SKUs
@@ -115,6 +115,14 @@ const MultiDashboard = ({ analysis, rawMetrics, plResult, ceoBrainPL, onReset }:
           <TabsTrigger value="fees" className="flex items-center gap-2">
             <BarChart3 className="w-4 h-4" />
             Fees
+          </TabsTrigger>
+          <TabsTrigger value="pl" className="flex items-center gap-2">
+            <Calculator className="w-4 h-4" />
+            <span className="hidden sm:inline">P&L</span>
+          </TabsTrigger>
+          <TabsTrigger value="ceobrain" className="flex items-center gap-2 bg-primary/10">
+            <Brain className="w-4 h-4 text-primary" />
+            <span className="hidden sm:inline">CEO Brain P&L</span>
           </TabsTrigger>
           <TabsTrigger value="alerts" className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4" />
@@ -131,10 +139,6 @@ const MultiDashboard = ({ analysis, rawMetrics, plResult, ceoBrainPL, onReset }:
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="transactions">
-          <TransactionTypeBreakdown byTransactionType={analysis.byTransactionType || []} fbaVsFbm={analysis.global.fbaVsFbm} />
-        </TabsContent>
-
         <TabsContent value="countries">
           <CountryBreakdown countries={analysis.byCountry} />
         </TabsContent>
@@ -143,10 +147,63 @@ const MultiDashboard = ({ analysis, rawMetrics, plResult, ceoBrainPL, onReset }:
           <DemographicAnalysis byCity={analysis.byCity || []} byRegion={analysis.byRegion || []} />
         </TabsContent>
 
+        <TabsContent value="transactions">
+          <TransactionTypeBreakdown byTransactionType={analysis.byTransactionType || []} fbaVsFbm={analysis.global.fbaVsFbm} />
+        </TabsContent>
+
         <TabsContent value="skus">
           <SKURanking allSKUs={analysis.allSKUs || []} topSKUs={analysis.topSKUs} bottomSKUs={analysis.bottomSKUs} />
         </TabsContent>
 
+        <TabsContent value="models">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {analysis.byModel.map((model) => (
+              <Card key={model.model} className="glass-card">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <span className={`w-3 h-3 rounded-full ${
+                      model.model === 'FBA' ? 'bg-primary' :
+                      model.model === 'FBM' ? 'bg-amazon-orange' : 'bg-idq'
+                    }`} />
+                    {model.model}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="text-center p-3 rounded-lg bg-muted/30">
+                      <p className="text-xs text-muted-foreground">Ventas</p>
+                      <p className="text-xl font-bold">${(model.totalSalesUSD / 1000).toFixed(0)}K</p>
+                    </div>
+                    <div className="text-center p-3 rounded-lg bg-muted/30">
+                      <p className="text-xs text-muted-foreground">Fee %</p>
+                      <p className={`text-xl font-bold ${model.feePercent > 30 ? 'text-status-critical' : 'text-foreground'}`}>
+                        {model.feePercent.toFixed(1)}%
+                      </p>
+                    </div>
+                    <div className="text-center p-3 rounded-lg bg-muted/30">
+                      <p className="text-xs text-muted-foreground">Refund Rate</p>
+                      <p className={`text-xl font-bold ${model.refundRate > 8 ? 'text-status-critical' : 'text-foreground'}`}>
+                        {model.refundRate.toFixed(1)}%
+                      </p>
+                    </div>
+                    <div className="text-center p-3 rounded-lg bg-muted/30">
+                      <p className="text-xs text-muted-foreground">Transacciones</p>
+                      <p className="text-xl font-bold">{model.transactionCount.toLocaleString()}</p>
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t border-border/50">
+                    <p className="text-xs text-muted-foreground mb-1">Países activos:</p>
+                    <div className="flex flex-wrap gap-1">
+                      {model.countries.map(c => (
+                        <Badge key={c} variant="outline" className="text-xs">{c}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
 
         <TabsContent value="fees">
           <Card className="glass-card">
@@ -179,6 +236,104 @@ const MultiDashboard = ({ analysis, rawMetrics, plResult, ceoBrainPL, onReset }:
           </Card>
         </TabsContent>
 
+        <TabsContent value="pl">
+          {plResult ? (
+            <PLDashboard 
+              metrics={plResult.total} 
+              currency={plResult.currency} 
+              period={`${analysis.files[0]?.fileName || 'Análisis'}`}
+              monthlyData={plResult.monthly}
+            />
+          ) : (
+            <Card className="glass-card">
+              <CardContent className="p-8 text-center">
+                <Calculator className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">P&L se genera automáticamente al procesar archivos de transacciones</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="ceobrain">
+          {ceoBrainPL ? (
+            <CEOBrainPLTable 
+              plTable={ceoBrainPL}
+              onExportPDF={() => {
+                // TODO: Implement PDF export
+                console.log('Export CEO Brain P&L to PDF');
+              }}
+              onExportExcel={() => {
+                // TODO: Implement Excel export
+                console.log('Export CEO Brain P&L to Excel');
+              }}
+            />
+          ) : (
+            <Card className="glass-card">
+              <CardContent className="p-8 text-center">
+                <Brain className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">CEO Brain P&L mensual se genera automáticamente al procesar archivos de transacciones</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="skus">
+          <div className="space-y-6">
+            <Card className="glass-card border-status-success/30">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-status-success">🏆 Top SKUs por Rentabilidad</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {analysis.topSKUs.map((sku, i) => (
+                    <div key={sku.sku} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                      <div className="flex items-center gap-3">
+                        <span className="w-6 h-6 rounded-full bg-status-success/20 text-status-success text-xs font-bold flex items-center justify-center">
+                          {i + 1}
+                        </span>
+                        <div>
+                          <p className="font-medium text-sm">{sku.sku}</p>
+                          <p className="text-xs text-muted-foreground">{sku.asin}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-status-success">${sku.profit.toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground">{sku.profitMargin.toFixed(1)}% margen</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="glass-card border-status-critical/30">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-status-critical">⚠️ SKUs Problemáticos</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {analysis.bottomSKUs.map((sku, i) => (
+                    <div key={sku.sku} className="flex items-center justify-between p-3 rounded-lg bg-status-critical/10">
+                      <div className="flex items-center gap-3">
+                        <AlertTriangle className="w-5 h-5 text-status-critical" />
+                        <div>
+                          <p className="font-medium text-sm">{sku.sku}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Fee: {sku.feePercent.toFixed(1)}% | Refund: {sku.refundRate.toFixed(1)}%
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-status-critical">{sku.profitMargin.toFixed(1)}% margen</p>
+                        <p className="text-xs text-muted-foreground">${sku.profit.toLocaleString()}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
 
         <TabsContent value="alerts">
           <div className="space-y-4">
