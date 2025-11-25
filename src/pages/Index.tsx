@@ -128,6 +128,21 @@ const Index = () => {
     }
   }, []);
 
+  const handleCFOFileSelect = useCallback(async (file: File) => {
+    setIsProcessing(true);
+    setError(null);
+    try {
+      const { transactions } = await parseCFOFile(file);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      setCfoAnalysis(generateMockCFOAnalysis(file.name, transactions));
+      toast({ title: "Análisis CFO completado", description: `${transactions.length} transacciones fiscales procesadas` });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error desconocido');
+    } finally {
+      setIsProcessing(false);
+    }
+  }, []);
+
   const handleCEOReset = useCallback(() => {
     setSingleAnalysis(null);
     setMultiAnalysis(null);
@@ -152,6 +167,17 @@ const Index = () => {
         <Header />
         <main className="container mx-auto px-4 pt-24 pb-12">
           <MultiDashboard analysis={multiAnalysis} onReset={handleCEOReset} />
+        </main>
+      </div>
+    );
+  }
+
+  if (mode === 'cfo' && cfoAnalysis) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <main className="container mx-auto px-4 pt-24 pb-12">
+          <CFODashboard analysis={cfoAnalysis} onReset={() => setCfoAnalysis(null)} />
         </main>
       </div>
     );
@@ -183,14 +209,23 @@ const Index = () => {
           </div>
 
           <Tabs value={mode} onValueChange={(v) => setMode(v as AnalysisMode)} className="space-y-8">
-            <TabsList className="grid w-full grid-cols-2 h-auto p-1 glass-card">
+            <TabsList className="grid w-full grid-cols-3 h-auto p-1 glass-card">
               <TabsTrigger value="ceo" className="py-4 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
                 <div className="flex flex-col items-center gap-2">
                   <div className="flex items-center gap-2">
                     <Zap className="w-5 h-5" />
                     <span className="font-semibold">CEO Brain</span>
                   </div>
-                  <span className="text-xs opacity-80">Análisis financiero multi-mercado</span>
+                  <span className="text-xs opacity-80">Análisis financiero</span>
+                </div>
+              </TabsTrigger>
+              <TabsTrigger value="cfo" className="py-4 data-[state=active]:bg-cfo data-[state=active]:text-cfo-foreground">
+                <div className="flex flex-col items-center gap-2">
+                  <div className="flex items-center gap-2">
+                    <Scale className="w-5 h-5" />
+                    <span className="font-semibold">CFO Brain</span>
+                  </div>
+                  <span className="text-xs opacity-80">Fiscalidad EU</span>
                 </div>
               </TabsTrigger>
               <TabsTrigger value="idq" className="py-4 data-[state=active]:bg-idq data-[state=active]:text-idq-foreground">
@@ -199,7 +234,7 @@ const Index = () => {
                     <Sparkles className="w-5 h-5" />
                     <span className="font-semibold">IDQ Optimizer</span>
                   </div>
-                  <span className="text-xs opacity-80">Optimización de listings</span>
+                  <span className="text-xs opacity-80">Listings</span>
                 </div>
               </TabsTrigger>
             </TabsList>
@@ -222,6 +257,30 @@ const Index = () => {
                   <div key={index} className="glass-card p-6 text-center animate-fade-in" style={{ animationDelay: `${200 + index * 100}ms` }}>
                     <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
                       <feature.icon className="w-6 h-6 text-primary" />
+                    </div>
+                    <h3 className="font-semibold text-foreground mb-2">{feature.title}</h3>
+                    <p className="text-sm text-muted-foreground">{feature.description}</p>
+                  </div>
+                ))}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="cfo" className="space-y-8">
+              <CFOFileUpload 
+                onFileSelect={handleCFOFileSelect}
+                isProcessing={isProcessing}
+                error={error}
+              />
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {[
+                  { icon: Receipt, title: 'Análisis VAT/IVA', description: 'IVA por país, tipo y transacción' },
+                  { icon: Building2, title: 'Obligaciones Fiscales', description: 'Registros, declaraciones, OSS/IOSS' },
+                  { icon: Scale, title: 'Auditoría Fiscal', description: 'Errores, discrepancias, regularizaciones' }
+                ].map((feature, index) => (
+                  <div key={index} className="glass-card p-6 text-center animate-fade-in" style={{ animationDelay: `${200 + index * 100}ms` }}>
+                    <div className="w-12 h-12 rounded-xl bg-cfo/10 flex items-center justify-center mx-auto mb-4">
+                      <feature.icon className="w-6 h-6 text-cfo" />
                     </div>
                     <h3 className="font-semibold text-foreground mb-2">{feature.title}</h3>
                     <p className="text-sm text-muted-foreground">{feature.description}</p>

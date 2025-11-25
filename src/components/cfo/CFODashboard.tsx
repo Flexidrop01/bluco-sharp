@@ -1,12 +1,13 @@
 import { CFOAnalysisResult } from '@/types/cfo';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Download, FileText, Scale, Globe, AlertTriangle, ClipboardList } from 'lucide-react';
+import { ArrowLeft, Download, FileText, Scale, Globe, AlertTriangle, ClipboardList, BarChart3 } from 'lucide-react';
 import CFOExecutiveSummary from './CFOExecutiveSummary';
 import CFOCountryObligations from './CFOCountryObligations';
 import CFOVATAnalysis from './CFOVATAnalysis';
 import CFOErrorsList from './CFOErrorsList';
 import CFOActionPlan from './CFOActionPlan';
+import CFOCharts from './CFOCharts';
 
 interface CFODashboardProps {
   analysis: CFOAnalysisResult;
@@ -42,8 +43,12 @@ const CFODashboard = ({ analysis, onReset }: CFODashboardProps) => {
       <CFOExecutiveSummary summary={analysis.executiveSummary} />
 
       {/* Tabs */}
-      <Tabs defaultValue="countries" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4 h-auto p-1 bg-card/50">
+      <Tabs defaultValue="charts" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-5 h-auto p-1 bg-card/50">
+          <TabsTrigger value="charts" className="py-3 data-[state=active]:bg-cfo data-[state=active]:text-cfo-foreground">
+            <BarChart3 className="w-4 h-4 mr-2" />
+            <span className="hidden sm:inline">Gráficos</span>
+          </TabsTrigger>
           <TabsTrigger value="countries" className="py-3 data-[state=active]:bg-cfo data-[state=active]:text-cfo-foreground">
             <Globe className="w-4 h-4 mr-2" />
             <span className="hidden sm:inline">Obligaciones</span>
@@ -61,6 +66,10 @@ const CFODashboard = ({ analysis, onReset }: CFODashboardProps) => {
             <span className="hidden sm:inline">Acciones</span>
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="charts">
+          <CFOCharts analysis={analysis} />
+        </TabsContent>
 
         <TabsContent value="countries">
           <CFOCountryObligations countries={analysis.countryObligations} />

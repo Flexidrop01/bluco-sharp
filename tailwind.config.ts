@@ -46,6 +46,10 @@ export default {
           DEFAULT: "hsl(var(--idq))",
           foreground: "hsl(var(--idq-foreground))",
         },
+        cfo: {
+          DEFAULT: "hsl(var(--cfo))",
+          foreground: "hsl(var(--cfo-foreground))",
+        },
         multi: {
           DEFAULT: "hsl(var(--multi))",
           foreground: "hsl(var(--multi-foreground))",
