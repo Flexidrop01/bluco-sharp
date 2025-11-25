@@ -35,6 +35,7 @@ const Index = () => {
   const [rowsProcessed, setRowsProcessed] = useState(0);
   const [singleAnalysis, setSingleAnalysis] = useState<AnalysisResult | null>(null);
   const [multiAnalysis, setMultiAnalysis] = useState<MultiAnalysisResult | null>(null);
+  const [rawMetrics, setRawMetrics] = useState<any | null>(null);
   const [plResult, setPLResult] = useState<PLResult | null>(null);
   const [ceoBrainPL, setCeoBrainPL] = useState<MonthlyPLTable | null>(null);
   const [idqAnalysis, setIdqAnalysis] = useState<IDQAnalysisResult | null>(null);
@@ -101,6 +102,7 @@ const Index = () => {
           const analysis = convertMetricsToAnalysis(metrics, fileInfos);
           const pl = convertMetricsToPL(metrics);
           setMultiAnalysis(analysis);
+          setRawMetrics(metrics);
           setPLResult(pl);
           setSingleAnalysis(null);
         }
@@ -113,6 +115,7 @@ const Index = () => {
         const analysis = convertMetricsToAnalysis(mergedMetrics, fileInfos);
         const pl = convertMetricsToPL(mergedMetrics);
         setMultiAnalysis(analysis);
+        setRawMetrics(mergedMetrics);
         setPLResult(pl);
         setSingleAnalysis(null);
       }
@@ -162,6 +165,7 @@ const Index = () => {
   const handleCEOReset = useCallback(() => {
     setSingleAnalysis(null);
     setMultiAnalysis(null);
+    setRawMetrics(null);
     setPLResult(null);
     setCeoBrainPL(null);
     setError(null);
@@ -186,6 +190,7 @@ const Index = () => {
         <main className="container mx-auto px-4 pt-24 pb-12">
           <MultiDashboard 
             analysis={multiAnalysis} 
+            rawMetrics={rawMetrics}
             plResult={plResult || undefined}
             ceoBrainPL={ceoBrainPL || undefined}
             onReset={handleCEOReset} 
