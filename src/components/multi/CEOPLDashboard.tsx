@@ -34,13 +34,13 @@ const CEOPLDashboard = ({ metrics }: CEOPLDashboardProps) => {
   // === OTROS MOVIMIENTOS (transferencias, no son ingresos ni gastos) ===
   const otrosMovimientos = metrics.otherMovements;
   
-  // === VENTAS FBA/FBM (productSales, sin IVA separado por fulfillment) ===
+  // === VENTAS FBA/FBM CON IVA (salesWithTax incluye IVA) ===
   const fbaData = metrics.byFulfillment.get('FBA');
   const fbmData = metrics.byFulfillment.get('FBM');
-  const ventasFBA = fbaData?.grossSales || 0;
-  const refundsFBA = fbaData?.refunds || 0;
-  const ventasFBM = fbmData?.grossSales || 0;
-  const refundsFBM = fbmData?.refunds || 0;
+  const ventasFBA = fbaData?.salesWithTax || 0;    // CON IVA
+  const refundsFBA = fbaData?.refunds || 0;        // CON IVA (ya corregido en processor)
+  const ventasFBM = fbmData?.salesWithTax || 0;    // CON IVA
+  const refundsFBM = fbmData?.refunds || 0;        // CON IVA (ya corregido en processor)
   
   // Desglose de gastos
   const comisionesVentas = metrics.sellingFees;
