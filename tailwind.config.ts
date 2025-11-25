@@ -46,6 +46,10 @@ export default {
           DEFAULT: "hsl(var(--idq))",
           foreground: "hsl(var(--idq-foreground))",
         },
+        multi: {
+          DEFAULT: "hsl(var(--multi))",
+          foreground: "hsl(var(--multi-foreground))",
+        },
         "amazon-orange": "hsl(var(--amazon-orange))",
         "status-critical": "hsl(var(--status-critical))",
         "status-warning": "hsl(var(--status-warning))",

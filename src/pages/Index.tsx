@@ -4,17 +4,21 @@ import FileUpload from '@/components/FileUpload';
 import AnalysisDashboard from '@/components/AnalysisDashboard';
 import IDQFileUpload from '@/components/idq/IDQFileUpload';
 import IDQDashboard from '@/components/idq/IDQDashboard';
+import MultiFileUpload from '@/components/multi/MultiFileUpload';
+import MultiDashboard from '@/components/multi/MultiDashboard';
 import { parseFile } from '@/lib/fileParser';
 import { parseIDQFile } from '@/lib/idqParser';
 import { generateMockAnalysis } from '@/lib/mockAnalysis';
 import { generateMockIDQAnalysis } from '@/lib/mockIdqAnalysis';
+import { generateMockMultiAnalysis } from '@/lib/mockMultiAnalysis';
 import { AnalysisResult } from '@/types/analysis';
 import { IDQAnalysisResult } from '@/types/idq';
+import { MultiAnalysisResult, FileInfo } from '@/types/multiTransaction';
 import { toast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Zap, BarChart3, Shield, Brain, Sparkles, FileText, Image, Tag } from 'lucide-react';
+import { Zap, BarChart3, Shield, Brain, Sparkles, FileText, Image, Tag, Globe, Layers, Target } from 'lucide-react';
 
-type AnalysisMode = 'ceo' | 'idq';
+type AnalysisMode = 'ceo' | 'idq' | 'multi';
 
 const Index = () => {
   const [mode, setMode] = useState<AnalysisMode>('ceo');
@@ -22,34 +26,18 @@ const Index = () => {
   const [error, setError] = useState<string | null>(null);
   const [ceoAnalysis, setCeoAnalysis] = useState<AnalysisResult | null>(null);
   const [idqAnalysis, setIdqAnalysis] = useState<IDQAnalysisResult | null>(null);
+  const [multiAnalysis, setMultiAnalysis] = useState<MultiAnalysisResult | null>(null);
 
   const handleCEOFileSelect = useCallback(async (file: File) => {
     setIsProcessing(true);
     setError(null);
-
     try {
-      const { headers, data, reportType } = await parseFile(file);
-
-      if (reportType === 'unknown') {
-        toast({
-          title: "Tipo de informe no reconocido",
-          description: "El archivo no parece ser un informe estándar de Amazon Seller o Vendor Central.",
-          variant: "destructive"
-        });
-      }
-
+      const { reportType } = await parseFile(file);
       await new Promise(resolve => setTimeout(resolve, 2000));
-      const result = generateMockAnalysis(file.name, reportType === 'unknown' ? 'seller' : reportType);
-      setCeoAnalysis(result);
-      
-      toast({
-        title: "Análisis completado",
-        description: `Informe de ${reportType === 'seller' ? 'Seller' : reportType === 'vendor' ? 'Vendor' : 'Amazon'} procesado.`,
-      });
+      setCeoAnalysis(generateMockAnalysis(file.name, reportType === 'unknown' ? 'seller' : reportType));
+      toast({ title: "Análisis completado", description: `Informe procesado correctamente.` });
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Error desconocido';
-      setError(errorMessage);
-      toast({ title: "Error", description: errorMessage, variant: "destructive" });
+      setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setIsProcessing(false);
     }
@@ -58,52 +46,50 @@ const Index = () => {
   const handleIDQFileSelect = useCallback(async (file: File) => {
     setIsProcessing(true);
     setError(null);
-
     try {
-      const { headers, data, detectedColumns, isValid } = await parseIDQFile(file);
-
-      if (!isValid) {
-        toast({
-          title: "Formato IDQ no reconocido",
-          description: "El archivo no parece ser un informe IDQ estándar. Se usará análisis genérico.",
-          variant: "destructive"
-        });
-      }
-
+      const { data } = await parseIDQFile(file);
       await new Promise(resolve => setTimeout(resolve, 2000));
-      const result = generateMockIDQAnalysis(file.name, data);
-      setIdqAnalysis(result);
-      
-      toast({
-        title: "Análisis IDQ completado",
-        description: `${result.asinAnalyses.length} ASINs analizados correctamente.`,
-      });
+      setIdqAnalysis(generateMockIDQAnalysis(file.name, data));
+      toast({ title: "Análisis IDQ completado" });
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Error desconocido';
-      setError(errorMessage);
-      toast({ title: "Error", description: errorMessage, variant: "destructive" });
+      setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setIsProcessing(false);
     }
   }, []);
 
-  const handleCEOReset = useCallback(() => {
-    setCeoAnalysis(null);
+  const handleMultiFilesSelect = useCallback(async (files: File[]) => {
+    setIsProcessing(true);
     setError(null);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      const mockFiles: FileInfo[] = files.map((f, i) => ({
+        id: `file-${i}`,
+        fileName: f.name,
+        marketplace: ['amazon.com', 'amazon.de', 'amazon.es', 'amazon.co.uk'][i % 4],
+        country: ['USA', 'Germany', 'Spain', 'UK'][i % 4],
+        currency: ['USD', 'EUR', 'EUR', 'GBP'][i % 4],
+        region: ['NA', 'EU', 'EU', 'EU'][i % 4],
+        reportType: 'transaction',
+        rowCount: Math.floor(Math.random() * 5000) + 500,
+        detectedColumns: []
+      }));
+      setMultiAnalysis(generateMockMultiAnalysis(mockFiles));
+      toast({ title: "Análisis Multi-Mercado completado", description: `${files.length} archivos procesados.` });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error desconocido');
+    } finally {
+      setIsProcessing(false);
+    }
   }, []);
 
-  const handleIDQReset = useCallback(() => {
-    setIdqAnalysis(null);
-    setError(null);
-  }, []);
-
-  // Show dashboards if analysis exists
+  // Show dashboards
   if (ceoAnalysis && mode === 'ceo') {
     return (
       <div className="min-h-screen bg-background">
         <Header />
         <main className="container mx-auto px-4 pt-24 pb-12">
-          <AnalysisDashboard analysis={ceoAnalysis} onReset={handleCEOReset} />
+          <AnalysisDashboard analysis={ceoAnalysis} onReset={() => setCeoAnalysis(null)} />
         </main>
       </div>
     );
@@ -114,7 +100,18 @@ const Index = () => {
       <div className="min-h-screen bg-background">
         <Header />
         <main className="container mx-auto px-4 pt-24 pb-12">
-          <IDQDashboard analysis={idqAnalysis} onReset={handleIDQReset} />
+          <IDQDashboard analysis={idqAnalysis} onReset={() => setIdqAnalysis(null)} />
+        </main>
+      </div>
+    );
+  }
+
+  if (multiAnalysis && mode === 'multi') {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <main className="container mx-auto px-4 pt-24 pb-12">
+          <MultiDashboard analysis={multiAnalysis} onReset={() => setMultiAnalysis(null)} />
         </main>
       </div>
     );
@@ -123,91 +120,76 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      
       <main className="container mx-auto px-4 pt-24 pb-12">
         <div className="max-w-4xl mx-auto">
-          {/* Hero Section */}
           <div className="text-center mb-8 animate-fade-in">
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6">
               <span className="text-gradient">Bluco Analyzer</span>
             </h1>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Herramientas de análisis avanzado para tu cuenta de Amazon
+              Suite completa de análisis para tu cuenta de Amazon
             </p>
           </div>
 
-          {/* Mode Tabs */}
           <Tabs value={mode} onValueChange={(v) => setMode(v as AnalysisMode)} className="space-y-8">
-            <TabsList className="grid w-full grid-cols-2 h-auto p-1 glass-card">
-              <TabsTrigger 
-                value="ceo" 
-                className="py-4 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-              >
-                <div className="flex flex-col items-center gap-2">
-                  <div className="flex items-center gap-2">
-                    <Zap className="w-5 h-5" />
-                    <span className="font-semibold">CEO Brain</span>
-                  </div>
-                  <span className="text-xs opacity-80">Análisis financiero sin filtros</span>
+            <TabsList className="grid w-full grid-cols-3 h-auto p-1 glass-card">
+              <TabsTrigger value="ceo" className="py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                <div className="flex flex-col items-center gap-1">
+                  <Zap className="w-4 h-4" />
+                  <span className="text-xs font-semibold">CEO Brain</span>
                 </div>
               </TabsTrigger>
-              <TabsTrigger 
-                value="idq" 
-                className="py-4 data-[state=active]:bg-idq data-[state=active]:text-idq-foreground"
-              >
-                <div className="flex flex-col items-center gap-2">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-5 h-5" />
-                    <span className="font-semibold">IDQ Optimizer</span>
-                  </div>
-                  <span className="text-xs opacity-80">Optimización de listings</span>
+              <TabsTrigger value="idq" className="py-3 data-[state=active]:bg-idq data-[state=active]:text-idq-foreground">
+                <div className="flex flex-col items-center gap-1">
+                  <Sparkles className="w-4 h-4" />
+                  <span className="text-xs font-semibold">IDQ Optimizer</span>
+                </div>
+              </TabsTrigger>
+              <TabsTrigger value="multi" className="py-3 data-[state=active]:bg-multi data-[state=active]:text-multi-foreground">
+                <div className="flex flex-col items-center gap-1">
+                  <Globe className="w-4 h-4" />
+                  <span className="text-xs font-semibold">Multi-Mercado</span>
                 </div>
               </TabsTrigger>
             </TabsList>
 
             <TabsContent value="ceo" className="space-y-8">
-              <FileUpload 
-                onFileSelect={handleCEOFileSelect}
-                isProcessing={isProcessing}
-                error={error}
-              />
-              
+              <FileUpload onFileSelect={handleCEOFileSelect} isProcessing={isProcessing} error={error} />
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {[
-                  { icon: BarChart3, title: 'Diagnóstico Numérico', description: 'Ventas, fees, devoluciones y rentabilidad' },
-                  { icon: Brain, title: 'Análisis Estratégico', description: 'Riesgos, oportunidades y recomendaciones' },
-                  { icon: Shield, title: 'Plan de Acción', description: 'Decisiones priorizadas con impacto definido' }
-                ].map((feature, index) => (
-                  <div key={index} className="glass-card p-6 text-center animate-fade-in" style={{ animationDelay: `${200 + index * 100}ms` }}>
+                  { icon: BarChart3, title: 'Diagnóstico Numérico', description: 'Ventas, fees, devoluciones' },
+                  { icon: Brain, title: 'Análisis Estratégico', description: 'Riesgos y oportunidades' },
+                  { icon: Shield, title: 'Plan de Acción', description: 'Decisiones priorizadas' }
+                ].map((f, i) => (
+                  <div key={i} className="glass-card p-6 text-center">
                     <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                      <feature.icon className="w-6 h-6 text-primary" />
+                      <f.icon className="w-6 h-6 text-primary" />
                     </div>
-                    <h3 className="font-semibold text-foreground mb-2">{feature.title}</h3>
-                    <p className="text-sm text-muted-foreground">{feature.description}</p>
+                    <h3 className="font-semibold mb-2">{f.title}</h3>
+                    <p className="text-sm text-muted-foreground">{f.description}</p>
                   </div>
                 ))}
               </div>
             </TabsContent>
 
             <TabsContent value="idq" className="space-y-8">
-              <IDQFileUpload 
-                onFileSelect={handleIDQFileSelect}
-                isProcessing={isProcessing}
-                error={error}
-              />
-              
+              <IDQFileUpload onFileSelect={handleIDQFileSelect} isProcessing={isProcessing} error={error} />
+            </TabsContent>
+
+            <TabsContent value="multi" className="space-y-8">
+              <MultiFileUpload onFilesSelect={handleMultiFilesSelect} isProcessing={isProcessing} error={error} />
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {[
-                  { icon: FileText, title: 'Contenido Optimizado', description: 'Títulos, bullets y descripciones mejoradas' },
-                  { icon: Image, title: 'Plan de Multimedia', description: 'Estrategia de imágenes y vídeos' },
-                  { icon: Tag, title: 'Atributos Completos', description: 'Datos estructurados para mejor indexación' }
-                ].map((feature, index) => (
-                  <div key={index} className="glass-card p-6 text-center animate-fade-in" style={{ animationDelay: `${200 + index * 100}ms` }}>
-                    <div className="w-12 h-12 rounded-xl bg-idq/10 flex items-center justify-center mx-auto mb-4">
-                      <feature.icon className="w-6 h-6 text-idq" />
+                  { icon: Globe, title: 'Multi-País', description: 'USA, EU, JP, MX, CA...' },
+                  { icon: Layers, title: 'Modelos Unificados', description: 'FBA, FBM, AWD juntos' },
+                  { icon: Target, title: 'KPIs Globales', description: 'Visión consolidada' }
+                ].map((f, i) => (
+                  <div key={i} className="glass-card p-6 text-center">
+                    <div className="w-12 h-12 rounded-xl bg-multi/10 flex items-center justify-center mx-auto mb-4">
+                      <f.icon className="w-6 h-6 text-multi" />
                     </div>
-                    <h3 className="font-semibold text-foreground mb-2">{feature.title}</h3>
-                    <p className="text-sm text-muted-foreground">{feature.description}</p>
+                    <h3 className="font-semibold mb-2">{f.title}</h3>
+                    <p className="text-sm text-muted-foreground">{f.description}</p>
                   </div>
                 ))}
               </div>
