@@ -1,4 +1,5 @@
 import { MultiAnalysisResult } from '@/types/multiTransaction';
+import { AggregatedMetrics } from '@/lib/massiveFileProcessor';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,17 +15,19 @@ import SKURanking from './SKURanking';
 import TransactionTypeBreakdown from './TransactionTypeBreakdown';
 import { PLDashboard } from './PLDashboard';
 import CEOBrainPLTable from './CEOBrainPLTable';
+import CEOPLDashboard from './CEOPLDashboard';
 import { PLResult } from '@/lib/metricsToPL';
 import { MonthlyPLTable } from '@/lib/ceoBrainPLBuilder';
 
 interface MultiDashboardProps {
   analysis: MultiAnalysisResult;
+  rawMetrics?: AggregatedMetrics;
   plResult?: PLResult;
   ceoBrainPL?: MonthlyPLTable;
   onReset: () => void;
 }
 
-const MultiDashboard = ({ analysis, plResult, ceoBrainPL, onReset }: MultiDashboardProps) => {
+const MultiDashboard = ({ analysis, rawMetrics, plResult, ceoBrainPL, onReset }: MultiDashboardProps) => {
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat('es-ES', {
       dateStyle: 'long',
@@ -82,28 +85,10 @@ const MultiDashboard = ({ analysis, plResult, ceoBrainPL, onReset }: MultiDashbo
         </div>
       </div>
 
-      {/* Executive Summary */}
-      <Card className="glass-card border-multi/30">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-lg font-semibold flex items-center gap-2">
-            <Globe className="w-5 h-5 text-multi" />
-            Resumen Ejecutivo Global
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div 
-            className="prose prose-sm prose-invert max-w-none text-sm leading-relaxed"
-            dangerouslySetInnerHTML={{ 
-              __html: analysis.executiveSummary
-                .replace(/## /g, '<h3 class="text-lg font-bold text-multi mt-4 mb-2">')
-                .replace(/### /g, '<h4 class="text-base font-semibold text-foreground mt-3 mb-1">')
-                .replace(/\*\*(.*?)\*\*/g, '<strong class="text-foreground">$1</strong>')
-                .replace(/\| /g, '<span class="px-2">|</span> ')
-                .replace(/\n/g, '<br/>')
-            }}
-          />
-        </CardContent>
-      </Card>
+      {/* CEO P&L Dashboard - Visual and Professional */}
+      {rawMetrics && (
+        <CEOPLDashboard metrics={rawMetrics} />
+      )}
 
       {/* Global Summary Metrics */}
       <GlobalSummary global={analysis.global} fileCount={analysis.fileCount} />
