@@ -27,16 +27,9 @@ import {
  * - Impuesto retenido
  */
 
-// Transaction categories
-export const INCOME_TYPES = ['pedido', 'order', 'reembolso', 'refund'];
-export const EXPENSE_TYPES = [
-  'tarifa de prestación de servicio', 
-  'servicios de envío', 
-  'tarifas de inventario de logística de amazon',
-  'service fee',
-  'shipping service',
-  'fba inventory fee'
-];
+// Transaction categories - based on "tipo" column
+// IMPORTANT: Only "Transferir" type goes to Other Movements
+// Everything else contributes to either Income or Expenses based on column values
 export const OTHER_MOVEMENT_TYPES = ['transferir', 'transfer'];
 
 // Aggregated metrics structure
@@ -274,21 +267,16 @@ const detectMarketplaceExact = (value: string): string => {
   return normalized || 'unknown';
 };
 
-// Classify transaction type into category
+// Classify transaction type - simple: only "Transferir" is other movement
 const classifyTransactionCategory = (type: string): 'income' | 'expense' | 'other' => {
   const normalized = type.toLowerCase().trim();
   
-  // OTHER MOVEMENTS - NOT income or expense
+  // OTHER MOVEMENTS - NOT income or expense (bank transfers)
   if (OTHER_MOVEMENT_TYPES.some(t => normalized.includes(t))) return 'other';
   
-  // INCOME types
-  if (INCOME_TYPES.some(t => normalized.includes(t))) return 'income';
-  
-  // EXPENSE types
-  if (EXPENSE_TYPES.some(t => normalized.includes(t))) return 'expense';
-  
-  // Default to income if has product sales, otherwise expense
-  return 'expense';
+  // Everything else is either income or expense based on column values
+  // We'll determine this by the values in the row, not by type
+  return 'income'; // Default, actual classification happens by column values
 };
 
 // Process a single row and update metrics
@@ -361,9 +349,17 @@ const processRow = (
                    transactionType.toLowerCase().includes('refund');
   const isOtherMovement = transactionCategory === 'other';
   
+  // Calculate row income (columns 13-21 in Excel = productSales to taxCollected)
+  const rowIncome = productSales + productSalesTax + shippingCredits + shippingCreditsTax +
+                    giftwrapCredits + giftwrapCreditsTax + promotionalRebates + 
+                    promotionalRebatesTax + marketplaceWithheldTax;
+  
+  // Calculate row expenses (columns 22-25 in Excel = fees)
+  const rowExpenses = sellingFees + fbaFees + otherTransactionFees + otherFees;
+  
   // Only count income/expenses if NOT other movement (transfers, etc.)
   if (!isOtherMovement) {
-    // Income columns - sum ALL values (positive and negative)
+    // Income columns - sum ALL values (positive and negative) from columns 13-21
     metrics.productSales += productSales;
     metrics.productSalesTax += productSalesTax;
     metrics.shippingCredits += shippingCredits;
@@ -374,7 +370,7 @@ const processRow = (
     metrics.promotionalRebates += promotionalRebates;
     metrics.promotionalRebatesTax += promotionalRebatesTax;
     
-    // Expense columns - keep as-is (already negative in file)
+    // Expense columns - keep as-is (already negative in file) from columns 22-25
     metrics.sellingFees += sellingFees;
     metrics.fbaFees += fbaFees;
     metrics.otherTransactionFees += otherTransactionFees;
@@ -383,14 +379,14 @@ const processRow = (
     // Track refunds separately for analysis
     if (isRefund) {
       metrics.refundCount++;
-      metrics.totalRefunds += Math.abs(productSales);
+      metrics.totalRefunds += Math.abs(productSales + productSalesTax);
     }
   } else {
-    // Track other movements separately (transfers, etc.)
+    // Track other movements separately (transfers, etc.) - use the "total" column
     metrics.otherMovements += rowTotal;
   }
   
-  // Always track actual total from file
+  // Always track actual total from file (column "total")
   metrics.actualTotal += rowTotal;
   
   // === UPDATE METADATA ===
