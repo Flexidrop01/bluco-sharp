@@ -1,7 +1,6 @@
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import {
-  UNIVERSAL_COLUMN_MAP,
   MARKETPLACE_COUNTRY_MAP,
   EXCHANGE_RATES,
   shouldSkipRow,
@@ -9,7 +8,8 @@ import {
   findStandardColumn,
   detectMarketplace,
   parseNumericValue,
-  parseDateValue
+  parseDateValue,
+  classifyTransactionType
 } from './massiveColumnMappings';
 
 // Chunk size for processing large files
@@ -62,6 +62,9 @@ export interface AggregatedMetrics {
   bySKU: Map<string, SKUAggregates>;
   byFeeType: Map<string, number>;
   byFulfillment: Map<string, FulfillmentAggregates>;
+  byCity: Map<string, CityAggregates>;
+  byRegion: Map<string, RegionAggregates>;
+  byTransactionType: Map<string, number>;
   
   // Errors
   calculatedTotal: number;
@@ -73,6 +76,7 @@ export interface AggregatedMetrics {
   marketplaces: Set<string>;
   dateRange: { min: Date | null; max: Date | null };
   detectedColumns: Map<string, string>;
+  uniqueSKUs: Set<string>;
 }
 
 export interface CountryAggregates {
@@ -89,6 +93,7 @@ export interface CountryAggregates {
   netSales: number;
   ebitda: number;
   transactionCount: number;
+  topCities: Map<string, number>;
 }
 
 export interface MonthAggregates {
@@ -102,14 +107,17 @@ export interface MonthAggregates {
 
 export interface SKUAggregates {
   sku: string;
+  description: string;
   asin?: string;
   grossSales: number;
   fees: number;
   feePercent: number;
   refunds: number;
   refundRate: number;
+  quantity: number;
   transactionCount: number;
   countries: Set<string>;
+  cities: Set<string>;
 }
 
 export interface FulfillmentAggregates {
@@ -118,6 +126,24 @@ export interface FulfillmentAggregates {
   fees: number;
   refunds: number;
   transactionCount: number;
+}
+
+export interface CityAggregates {
+  city: string;
+  region: string;
+  postalCode: string;
+  country: string;
+  grossSales: number;
+  transactionCount: number;
+  topSKUs: Map<string, number>;
+}
+
+export interface RegionAggregates {
+  region: string;
+  country: string;
+  grossSales: number;
+  transactionCount: number;
+  cities: Set<string>;
 }
 
 export interface DiscrepancyRecord {
@@ -164,14 +190,38 @@ const createEmptyMetrics = (): AggregatedMetrics => ({
   bySKU: new Map(),
   byFeeType: new Map(),
   byFulfillment: new Map(),
+  byCity: new Map(),
+  byRegion: new Map(),
+  byTransactionType: new Map(),
   calculatedTotal: 0,
   actualTotal: 0,
   discrepancies: [],
   currencies: new Set(),
   marketplaces: new Set(),
   dateRange: { min: null, max: null },
-  detectedColumns: new Map()
+  detectedColumns: new Map(),
+  uniqueSKUs: new Set()
 });
+
+// Detect fulfillment model from Spanish or English values
+const detectFulfillmentModel = (value: string): string => {
+  const normalized = value.toLowerCase().trim();
+  
+  // Spanish detection
+  if (normalized === 'amazon' || normalized.includes('logística de amazon') || normalized.includes('fba')) {
+    return 'FBA';
+  }
+  if (normalized === 'vendedor' || normalized.includes('merchant') || normalized.includes('fbm') || normalized.includes('mfn')) {
+    return 'FBM';
+  }
+  if (normalized.includes('awd') || normalized.includes('warehouse')) {
+    return 'AWD';
+  }
+  
+  // Default based on content
+  if (normalized.includes('amazon')) return 'FBA';
+  return 'FBM';
+};
 
 // Process a single row and update metrics
 const processRow = (
@@ -200,18 +250,33 @@ const processRow = (
     return parseNumericValue(getValue(standardKey));
   };
   
-  // Extract data
-  const marketplace = detectMarketplace(String(getValue('marketplace') || 'amazon.com'));
+  const getString = (standardKey: string): string => {
+    const val = getValue(standardKey);
+    return val ? String(val).trim() : '';
+  };
+  
+  // Extract marketplace from "web de Amazon" column
+  const marketplaceRaw = getString('marketplace');
+  const marketplace = detectMarketplace(marketplaceRaw);
   const marketplaceInfo = MARKETPLACE_COUNTRY_MAP[marketplace] || MARKETPLACE_COUNTRY_MAP['amazon.com'];
-  const currency = String(getValue('currency') || marketplaceInfo.currency);
+  const currency = getString('currency') || marketplaceInfo.currency;
   const exchangeRate = EXCHANGE_RATES[currency] || 1;
   
+  // Extract key fields
   const date = parseDateValue(getValue('date'));
-  const sku = String(getValue('sku') || 'UNKNOWN');
-  const fulfillment = String(getValue('fulfillment') || 'FBA').toUpperCase();
-  const fulfillmentModel = fulfillment.includes('FBA') ? 'FBA' : 
-                          fulfillment.includes('FBM') || fulfillment.includes('MFN') ? 'FBM' : 
-                          fulfillment.includes('AWD') ? 'AWD' : 'OTHER';
+  const sku = getString('sku');
+  const description = getString('description');
+  const quantity = Math.max(1, getNumeric('quantity'));
+  const transactionType = classifyTransactionType(getString('type'));
+  
+  // Fulfillment - detect from Spanish values
+  const fulfillmentRaw = getString('fulfillment');
+  const fulfillmentModel = detectFulfillmentModel(fulfillmentRaw);
+  
+  // Demographic data
+  const city = getString('city');
+  const region = getString('region');
+  const postalCode = getString('postalCode');
   
   // Revenue
   const productSales = getNumeric('productSales');
@@ -222,10 +287,10 @@ const processRow = (
   
   const rowGrossSales = productSales + shippingCredits + giftwrapCredits;
   
-  // Fees
+  // Fees (Spanish column names are already mapped)
   const sellingFees = Math.abs(getNumeric('sellingFees'));
   const fbaFees = Math.abs(getNumeric('fbaFees'));
-  const otherFees = Math.abs(getNumeric('otherTransactionFees') + getNumeric('other'));
+  const otherFees = Math.abs(getNumeric('otherTransactionFees')) + Math.abs(getNumeric('other'));
   const storageFees = Math.abs(getNumeric('storageFee'));
   const inboundFees = Math.abs(getNumeric('fbaInboundPlacementFee'));
   const regulatoryFees = Math.abs(getNumeric('regulatoryFee'));
@@ -234,21 +299,25 @@ const processRow = (
   const rowTotalFees = sellingFees + fbaFees + otherFees + storageFees + inboundFees + regulatoryFees + advertisingFees;
   
   // Refunds & Reimbursements
-  const refund = Math.abs(getNumeric('refund'));
+  const isRefund = transactionType === 'Refund' || productSales < 0;
+  const refund = isRefund ? Math.abs(productSales) : 0;
   const reimbursementLost = getNumeric('reimbursementLost');
   const reimbursementDamaged = getNumeric('reimbursementDamaged');
-  const reimbursementOther = getNumeric('reimbursementTotal') - reimbursementLost - reimbursementDamaged;
-  const rowReimbursements = reimbursementLost + reimbursementDamaged + Math.max(0, reimbursementOther);
+  const reimbursementTotal = getNumeric('reimbursementTotal');
+  const reimbursementOther = Math.max(0, reimbursementTotal - reimbursementLost - reimbursementDamaged);
+  const rowReimbursements = reimbursementLost + reimbursementDamaged + reimbursementOther;
   
   // Total from file
   const rowTotal = getNumeric('total');
   
   // Update global metrics
-  metrics.grossSales += rowGrossSales;
-  metrics.grossSalesUSD += rowGrossSales * exchangeRate;
-  metrics.productSales += productSales;
-  metrics.shippingCredits += shippingCredits;
-  metrics.giftwrapCredits += giftwrapCredits;
+  if (!isRefund) {
+    metrics.grossSales += rowGrossSales;
+    metrics.grossSalesUSD += rowGrossSales * exchangeRate;
+    metrics.productSales += productSales;
+    metrics.shippingCredits += shippingCredits;
+    metrics.giftwrapCredits += giftwrapCredits;
+  }
   metrics.promotionalRebates += promotionalRebates;
   metrics.taxCollected += taxCollected;
   
@@ -269,7 +338,7 @@ const processRow = (
   metrics.totalReimbursements += rowReimbursements;
   metrics.reimbursementLost += reimbursementLost;
   metrics.reimbursementDamaged += reimbursementDamaged;
-  metrics.reimbursementOther += Math.max(0, reimbursementOther);
+  metrics.reimbursementOther += reimbursementOther;
   
   // Track calculated vs actual
   const rowCalculated = rowGrossSales - promotionalRebates - rowTotalFees - refund + rowReimbursements;
@@ -290,11 +359,15 @@ const processRow = (
   // Update metadata
   metrics.currencies.add(currency);
   metrics.marketplaces.add(marketplace);
+  if (sku) metrics.uniqueSKUs.add(sku);
   
   if (date) {
     if (!metrics.dateRange.min || date < metrics.dateRange.min) metrics.dateRange.min = date;
     if (!metrics.dateRange.max || date > metrics.dateRange.max) metrics.dateRange.max = date;
   }
+  
+  // Track transaction types
+  metrics.byTransactionType.set(transactionType, (metrics.byTransactionType.get(transactionType) || 0) + 1);
   
   // Update country breakdown
   const country = marketplaceInfo.country;
@@ -312,16 +385,22 @@ const processRow = (
       reimbursements: 0,
       netSales: 0,
       ebitda: 0,
-      transactionCount: 0
+      transactionCount: 0,
+      topCities: new Map()
     });
   }
   const countryData = metrics.byCountry.get(country)!;
-  countryData.grossSales += rowGrossSales;
-  countryData.grossSalesUSD += rowGrossSales * exchangeRate;
+  if (!isRefund) {
+    countryData.grossSales += rowGrossSales;
+    countryData.grossSalesUSD += rowGrossSales * exchangeRate;
+  }
   countryData.fees += rowTotalFees;
   countryData.refunds += refund;
   countryData.reimbursements += rowReimbursements;
   countryData.transactionCount++;
+  if (city) {
+    countryData.topCities.set(city, (countryData.topCities.get(city) || 0) + rowGrossSales);
+  }
   
   // Update month breakdown
   if (date) {
@@ -337,33 +416,44 @@ const processRow = (
       });
     }
     const monthData = metrics.byMonth.get(monthKey)!;
-    monthData.grossSales += rowGrossSales;
+    if (!isRefund) monthData.grossSales += rowGrossSales;
     monthData.fees += rowTotalFees;
     monthData.refunds += refund;
     monthData.transactionCount++;
   }
   
   // Update SKU breakdown
-  if (sku && sku !== 'UNKNOWN') {
+  if (sku) {
     if (!metrics.bySKU.has(sku)) {
       metrics.bySKU.set(sku, {
         sku,
-        asin: String(getValue('asin') || ''),
+        description: description || sku,
+        asin: getString('asin') || '',
         grossSales: 0,
         fees: 0,
         feePercent: 0,
         refunds: 0,
         refundRate: 0,
+        quantity: 0,
         transactionCount: 0,
-        countries: new Set()
+        countries: new Set(),
+        cities: new Set()
       });
     }
     const skuData = metrics.bySKU.get(sku)!;
-    skuData.grossSales += rowGrossSales;
+    if (!isRefund) {
+      skuData.grossSales += rowGrossSales;
+      skuData.quantity += quantity;
+    }
     skuData.fees += rowTotalFees;
     skuData.refunds += refund;
     skuData.transactionCount++;
     skuData.countries.add(country);
+    if (city) skuData.cities.add(city);
+    // Update description if we get a better one
+    if (description && description.length > skuData.description.length) {
+      skuData.description = description;
+    }
   }
   
   // Update fulfillment breakdown
@@ -377,10 +467,50 @@ const processRow = (
     });
   }
   const fulfillmentData = metrics.byFulfillment.get(fulfillmentModel)!;
-  fulfillmentData.grossSales += rowGrossSales;
+  if (!isRefund) fulfillmentData.grossSales += rowGrossSales;
   fulfillmentData.fees += rowTotalFees;
   fulfillmentData.refunds += refund;
   fulfillmentData.transactionCount++;
+  
+  // Update city breakdown (demographic data)
+  if (city) {
+    const cityKey = `${city}|${region}|${country}`;
+    if (!metrics.byCity.has(cityKey)) {
+      metrics.byCity.set(cityKey, {
+        city,
+        region: region || '',
+        postalCode: postalCode || '',
+        country,
+        grossSales: 0,
+        transactionCount: 0,
+        topSKUs: new Map()
+      });
+    }
+    const cityData = metrics.byCity.get(cityKey)!;
+    if (!isRefund) cityData.grossSales += rowGrossSales;
+    cityData.transactionCount++;
+    if (sku) {
+      cityData.topSKUs.set(sku, (cityData.topSKUs.get(sku) || 0) + rowGrossSales);
+    }
+  }
+  
+  // Update region breakdown
+  if (region) {
+    const regionKey = `${region}|${country}`;
+    if (!metrics.byRegion.has(regionKey)) {
+      metrics.byRegion.set(regionKey, {
+        region,
+        country,
+        grossSales: 0,
+        transactionCount: 0,
+        cities: new Set()
+      });
+    }
+    const regionData = metrics.byRegion.get(regionKey)!;
+    if (!isRefund) regionData.grossSales += rowGrossSales;
+    regionData.transactionCount++;
+    if (city) regionData.cities.add(city);
+  }
   
   // Update fee type breakdown
   if (sellingFees > 0) metrics.byFeeType.set('Referral', (metrics.byFeeType.get('Referral') || 0) + sellingFees);
@@ -396,7 +526,8 @@ const processRow = (
 const finalizeMetrics = (metrics: AggregatedMetrics): void => {
   // Calculate net sales and EBITDA
   metrics.netSales = metrics.grossSales - metrics.promotionalRebates - metrics.totalRefunds;
-  metrics.netSalesUSD = metrics.grossSalesUSD - (metrics.promotionalRebates + metrics.totalRefunds) * (metrics.grossSalesUSD / metrics.grossSales || 1);
+  const avgExchangeRate = metrics.grossSales > 0 ? metrics.grossSalesUSD / metrics.grossSales : 1;
+  metrics.netSalesUSD = metrics.netSales * avgExchangeRate;
   metrics.ebitda = metrics.netSales - metrics.totalFees + metrics.totalReimbursements;
   
   // Calculate percentages
@@ -434,6 +565,8 @@ const buildColumnMap = (headers: string[]): Map<string, string> => {
     }
   }
   
+  console.log('[CEO Brain] Detected columns:', Object.fromEntries(columnMap));
+  
   return columnMap;
 };
 
@@ -465,6 +598,7 @@ export const processMassiveCSV = async (
               columnMap = buildColumnMap(headers);
               metrics.detectedColumns = columnMap;
               headerFound = true;
+              console.log('[CEO Brain] Header found at row', rowIndex);
             }
             continue;
           }
@@ -486,6 +620,14 @@ export const processMassiveCSV = async (
       },
       complete: () => {
         finalizeMetrics(metrics);
+        console.log('[CEO Brain] Processing complete:', {
+          totalRows: metrics.totalRows,
+          validTransactions: metrics.validTransactions,
+          skippedRows: metrics.skippedRows,
+          uniqueSKUs: metrics.uniqueSKUs.size,
+          countries: Array.from(metrics.marketplaces),
+          cities: metrics.byCity.size
+        });
         resolve(metrics);
       },
       error: (error) => {
@@ -531,6 +673,7 @@ export const processMassiveExcel = async (
               columnMap = buildColumnMap(headers);
               metrics.detectedColumns = columnMap;
               headerFound = true;
+              console.log('[CEO Brain] Header found at row', i);
             }
             continue;
           }
@@ -550,6 +693,11 @@ export const processMassiveExcel = async (
         }
         
         finalizeMetrics(metrics);
+        console.log('[CEO Brain] Processing complete:', {
+          totalRows: metrics.totalRows,
+          validTransactions: metrics.validTransactions,
+          uniqueSKUs: metrics.uniqueSKUs.size
+        });
         resolve(metrics);
       } catch (error) {
         reject(error);
