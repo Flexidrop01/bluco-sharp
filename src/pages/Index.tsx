@@ -4,21 +4,26 @@ import FileUpload from '@/components/FileUpload';
 import AnalysisDashboard from '@/components/AnalysisDashboard';
 import IDQFileUpload from '@/components/idq/IDQFileUpload';
 import IDQDashboard from '@/components/idq/IDQDashboard';
+import CFOFileUpload from '@/components/cfo/CFOFileUpload';
+import CFODashboard from '@/components/cfo/CFODashboard';
 import MultiDashboard from '@/components/multi/MultiDashboard';
 import { parseFile } from '@/lib/fileParser';
 import { parseIDQFile } from '@/lib/idqParser';
+import { parseCFOFile } from '@/lib/cfoParser';
 import { processMassiveFile } from '@/lib/massiveFileProcessor';
 import { convertMetricsToAnalysis } from '@/lib/metricsToAnalysis';
 import { generateMockAnalysis } from '@/lib/mockAnalysis';
 import { generateMockIDQAnalysis } from '@/lib/mockIdqAnalysis';
+import { generateMockCFOAnalysis } from '@/lib/mockCfoAnalysis';
 import { AnalysisResult } from '@/types/analysis';
 import { IDQAnalysisResult } from '@/types/idq';
+import { CFOAnalysisResult } from '@/types/cfo';
 import { MultiAnalysisResult, FileInfo } from '@/types/multiTransaction';
 import { toast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Zap, BarChart3, Shield, Brain, Sparkles, FileText, Image, Tag, Globe } from 'lucide-react';
+import { Zap, BarChart3, Brain, Sparkles, FileText, Image, Tag, Globe, Scale, Receipt, Building2 } from 'lucide-react';
 
-type AnalysisMode = 'ceo' | 'idq';
+type AnalysisMode = 'ceo' | 'cfo' | 'idq';
 
 const Index = () => {
   const [mode, setMode] = useState<AnalysisMode>('ceo');
@@ -29,6 +34,7 @@ const Index = () => {
   const [singleAnalysis, setSingleAnalysis] = useState<AnalysisResult | null>(null);
   const [multiAnalysis, setMultiAnalysis] = useState<MultiAnalysisResult | null>(null);
   const [idqAnalysis, setIdqAnalysis] = useState<IDQAnalysisResult | null>(null);
+  const [cfoAnalysis, setCfoAnalysis] = useState<CFOAnalysisResult | null>(null);
 
   // CEO Brain handles both single and multiple files
   const handleCEOFilesSelect = useCallback(async (files: File[]) => {
