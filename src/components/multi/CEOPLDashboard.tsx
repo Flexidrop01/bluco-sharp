@@ -18,10 +18,14 @@ const formatEUR = (amount: number, showSign = false) => {
 };
 
 const CEOPLDashboard = ({ metrics }: CEOPLDashboardProps) => {
-  // === INGRESOS TOTALES (suma de todas las columnas de ingresos) ===
-  const ingresosTotales = metrics.grossSales;
+  // === INGRESOS TOTALES ===
+  // CON IVA = suma de columnas 13-21 (productSales + productSalesTax + shippingCredits + etc.)
+  const ingresosConIVA = metrics.grossSales;
   
-  // === GASTOS TOTALES (suma de 4 columnas, ya negativos) ===
+  // SIN IVA = solo columna "ventas de productos" (sin el impuesto)
+  const ingresosSinIVA = metrics.productSales;
+  
+  // === GASTOS TOTALES (suma de columnas 22-25, ya negativos) ===
   const gastosTotales = metrics.totalFees;
   
   // === OTROS MOVIMIENTOS (transferencias, no son ingresos ni gastos) ===
@@ -35,13 +39,6 @@ const CEOPLDashboard = ({ metrics }: CEOPLDashboardProps) => {
   const ventasFBM = fbmData?.grossSales || 0;
   const refundsFBM = fbmData?.refunds || 0;
   
-  // Ventas totales FBA+FBM (con IVA)
-  const ventasTotalesConIVA = ventasFBA + ventasFBM;
-  
-  // Ventas sin IVA (estimación: 21% IVA España)
-  const ivaRate = 0.21;
-  const ventasSinIVA = ventasTotalesConIVA / (1 + ivaRate);
-  
   // Desglose de gastos
   const comisionesVentas = metrics.sellingFees;
   const comisionesFBA = metrics.fbaFees;
@@ -52,7 +49,7 @@ const CEOPLDashboard = ({ metrics }: CEOPLDashboardProps) => {
   const ebitda = metrics.ebitda;
   
   // Diferencia para verificación (debe ser ~0 si todo está clasificado)
-  const diferencia = metrics.actualTotal - (ingresosTotales + gastosTotales + otrosMovimientos);
+  const diferencia = metrics.actualTotal - (ingresosConIVA + gastosTotales + otrosMovimientos);
 
   return (
     <div className="space-y-6">
@@ -66,7 +63,7 @@ const CEOPLDashboard = ({ metrics }: CEOPLDashboardProps) => {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Ingresos Totales</p>
-                <p className="text-2xl font-bold text-green-500">{formatEUR(ingresosTotales)}</p>
+                <p className="text-2xl font-bold text-green-500">{formatEUR(ingresosConIVA)}</p>
               </div>
             </div>
           </CardContent>
@@ -129,12 +126,12 @@ const CEOPLDashboard = ({ metrics }: CEOPLDashboardProps) => {
             <Table>
               <TableBody>
                 <TableRow className="border-b-0">
-                  <TableCell className="font-medium">Ingresos Totales (Sin IVA estimado)</TableCell>
-                  <TableCell className="text-right font-bold text-green-500">{formatEUR(ventasSinIVA)}</TableCell>
+                  <TableCell className="font-medium">Ingresos Totales (Sin IVA)</TableCell>
+                  <TableCell className="text-right font-bold text-green-500">{formatEUR(ingresosSinIVA)}</TableCell>
                 </TableRow>
                 <TableRow className="border-b-0">
                   <TableCell className="font-medium">Ingresos Totales (Con IVA)</TableCell>
-                  <TableCell className="text-right font-bold text-green-500">{formatEUR(ingresosTotales)}</TableCell>
+                  <TableCell className="text-right font-bold text-green-500">{formatEUR(ingresosConIVA)}</TableCell>
                 </TableRow>
                 <TableRow className="border-b-2 border-border">
                   <TableCell colSpan={2} className="h-2"></TableCell>
@@ -220,7 +217,7 @@ const CEOPLDashboard = ({ metrics }: CEOPLDashboardProps) => {
                 <TableRow>
                   <TableCell className="pl-8 text-muted-foreground text-sm">% sobre ingresos</TableCell>
                   <TableCell className="text-right text-muted-foreground text-sm">
-                    {ingresosTotales > 0 ? ((Math.abs(comisionesVentas) / ingresosTotales) * 100).toFixed(2) : 0}%
+                    {ingresosConIVA > 0 ? ((Math.abs(comisionesVentas) / ingresosConIVA) * 100).toFixed(2) : 0}%
                   </TableCell>
                 </TableRow>
                 
@@ -345,7 +342,7 @@ const CEOPLDashboard = ({ metrics }: CEOPLDashboardProps) => {
               <TableBody>
                 <TableRow>
                   <TableCell>Ingresos Totales</TableCell>
-                  <TableCell className="text-right font-medium text-green-500">{formatEUR(ingresosTotales)}</TableCell>
+                  <TableCell className="text-right font-medium text-green-500">{formatEUR(ingresosConIVA)}</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell>Gastos Totales</TableCell>
@@ -357,7 +354,7 @@ const CEOPLDashboard = ({ metrics }: CEOPLDashboardProps) => {
                 </TableRow>
                 <TableRow className="border-t border-border">
                   <TableCell className="font-medium">= Total Calculado</TableCell>
-                  <TableCell className="text-right font-medium">{formatEUR(ingresosTotales + gastosTotales + otrosMovimientos)}</TableCell>
+                  <TableCell className="text-right font-medium">{formatEUR(ingresosConIVA + gastosTotales + otrosMovimientos)}</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell>Total según archivo</TableCell>
