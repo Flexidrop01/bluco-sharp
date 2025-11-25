@@ -246,6 +246,9 @@ export const convertMetricsToAnalysis = (
 
 /**
  * Genera resumen ejecutivo con SOLO datos reales del archivo
+ * Usa exactamente las categorías de Amazon:
+ * INGRESOS: ventas de productos, abonos de envío, envoltorio regalo, impuestos
+ * GASTOS: tarifas de venta, tarifas logística amazon, otras tarifas, otro
  */
 const generateExecutiveSummary = (
   metrics: AggregatedMetrics,
@@ -256,75 +259,94 @@ const generateExecutiveSummary = (
     ? `${metrics.dateRange.min.toLocaleDateString('es-ES')} - ${metrics.dateRange.max.toLocaleDateString('es-ES')}`
     : 'No disponible';
 
-  // Desglose de fees REAL (solo lo que tenemos en byFeeType)
-  const feeBreakdown = Array.from(metrics.byFeeType.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 6)
-    .map(([type, amount]) => {
-      const percent = metrics.totalFees > 0 ? (amount / metrics.totalFees * 100).toFixed(1) : '0';
-      return `| ${type} | ${amount.toLocaleString('es-ES', { maximumFractionDigits: 2 })} | ${percent}% |`;
-    })
-    .join('\n');
-
   // Desglose por modelo de fulfillment REAL
   const fulfillmentBreakdown = Array.from(metrics.byFulfillment.entries())
+    .filter(([, data]) => data.grossSales > 0 || data.fees > 0)
     .map(([model, data]) => {
-      return `| ${model} | ${data.grossSales.toLocaleString('es-ES', { maximumFractionDigits: 2 })} | ${data.fees.toLocaleString('es-ES', { maximumFractionDigits: 2 })} | ${data.transactionCount.toLocaleString()} |`;
+      return `- **${model}**: Ventas ${data.grossSales.toLocaleString('es-ES', { maximumFractionDigits: 2 })} | Fees ${data.fees.toLocaleString('es-ES', { maximumFractionDigits: 2 })} | ${data.transactionCount.toLocaleString()} transacciones`;
     })
     .join('\n');
-
-  // Alertas críticas
-  const criticalAlerts = alerts.filter(a => a.severity === 'critical');
 
   return `## ANÁLISIS CEO BRAIN — DATOS REALES DEL ARCHIVO
 
-### 📊 RESUMEN DE PROCESAMIENTO
-
-| Campo | Valor |
-|-------|-------|
-| **Transacciones válidas** | ${metrics.validTransactions.toLocaleString()} |
-| **Filas totales** | ${metrics.totalRows.toLocaleString()} |
-| **Filas ignoradas** | ${metrics.skippedRows.toLocaleString()} |
-| **Marketplaces** | ${marketplaces.join(', ') || 'No detectado'} |
-| **Período** | ${dateRangeText} |
-| **SKUs únicos** | ${metrics.bySKU.size.toLocaleString()} |
+### PROCESAMIENTO
+- **Transacciones válidas:** ${metrics.validTransactions.toLocaleString()}
+- **Filas totales:** ${metrics.totalRows.toLocaleString()}
+- **Marketplace(s):** ${marketplaces.join(', ') || 'No detectado'}
+- **Período:** ${dateRangeText}
+- **SKUs únicos:** ${metrics.bySKU.size.toLocaleString()}
 
 ---
 
-### 💰 MÉTRICAS FINANCIERAS
+### INGRESOS (extraídos del archivo)
 
-| Concepto | Valor | Observación |
-|----------|-------|-------------|
-| **Ventas Brutas** | ${metrics.grossSales.toLocaleString('es-ES', { maximumFractionDigits: 2 })} | Total product sales |
-| **Ventas Netas** | ${metrics.netSales.toLocaleString('es-ES', { maximumFractionDigits: 2 })} | Tras descuentos y devoluciones |
-| **Total Fees** | ${metrics.totalFees.toLocaleString('es-ES', { maximumFractionDigits: 2 })} | ${metrics.feePercent.toFixed(1)}% de ventas |
-| **Devoluciones** | ${metrics.totalRefunds.toLocaleString('es-ES', { maximumFractionDigits: 2 })} | ${metrics.refundRate.toFixed(1)}% tasa |
-| **Reembolsos Inventario** | ${metrics.totalReimbursements.toLocaleString('es-ES', { maximumFractionDigits: 2 })} | Recuperado de Amazon |
-| **EBITDA** | **${metrics.ebitda.toLocaleString('es-ES', { maximumFractionDigits: 2 })}** | ${metrics.ebitda >= 0 ? '✅' : '🔴'} |
-
----
-
-### 📦 DESGLOSE POR FULFILLMENT
-
-| Modelo | Ventas | Fees | Transacciones |
-|--------|--------|------|---------------|
-${fulfillmentBreakdown || '| Sin datos | - | - | - |'}
+| Concepto | Importe |
+|----------|---------|
+| Ventas de productos | ${metrics.productSales.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
+| Abonos de envío | ${metrics.shippingCredits.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
+| Abonos envoltorio regalo | ${metrics.giftwrapCredits.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
+| Impuestos retenidos | ${metrics.taxCollected.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
+| **TOTAL INGRESOS** | **${metrics.grossSales.toLocaleString('es-ES', { maximumFractionDigits: 2 })}** |
 
 ---
 
-### 💸 DESGLOSE DE FEES
+### DESCUENTOS Y DEVOLUCIONES
 
-| Tipo | Importe | % del Total |
-|------|---------|-------------|
-${feeBreakdown || '| Sin desglose | - | - |'}
+| Concepto | Importe |
+|----------|---------|
+| Devoluciones promocionales | ${metrics.promotionalRebates.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
+| Devoluciones clientes | ${metrics.totalRefunds.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
+| **TOTAL DESCUENTOS** | **${(metrics.promotionalRebates + metrics.totalRefunds).toLocaleString('es-ES', { maximumFractionDigits: 2 })}** |
 
 ---
 
-### ⚠️ ALERTAS (${criticalAlerts.length} críticas)
+### GASTOS (tarifas Amazon)
 
+| Concepto | Importe |
+|----------|---------|
+| Tarifas de venta | ${metrics.sellingFees.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
+| Tarifas Logística Amazon | ${metrics.fbaFees.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
+| Tarifas otras transacciones + otro | ${metrics.otherFees.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
+| Almacenamiento | ${metrics.storageFees.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
+| **TOTAL GASTOS** | **${metrics.totalFees.toLocaleString('es-ES', { maximumFractionDigits: 2 })}** |
+
+---
+
+### REEMBOLSOS DE AMAZON (si aplica)
+
+| Concepto | Importe |
+|----------|---------|
+| Inventario perdido | ${metrics.reimbursementLost.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
+| Inventario dañado | ${metrics.reimbursementDamaged.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
+| Otros reembolsos | ${metrics.reimbursementOther.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
+| **TOTAL REEMBOLSOS** | **${metrics.totalReimbursements.toLocaleString('es-ES', { maximumFractionDigits: 2 })}** |
+
+---
+
+### RESULTADO
+
+| Concepto | Importe |
+|----------|---------|
+| Ingresos brutos | ${metrics.grossSales.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
+| (-) Descuentos | ${(metrics.promotionalRebates + metrics.totalRefunds).toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
+| (=) Ingresos netos | ${metrics.netSales.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
+| (-) Gastos Amazon | ${metrics.totalFees.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
+| (+) Reembolsos Amazon | ${metrics.totalReimbursements.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
+| **(=) EBITDA** | **${metrics.ebitda.toLocaleString('es-ES', { maximumFractionDigits: 2 })}** |
+
+${metrics.ebitda >= 0 ? '✅ Resultado positivo' : '🔴 Resultado negativo'}
+
+---
+
+### POR FULFILLMENT
+${fulfillmentBreakdown || 'Sin datos de fulfillment detectados'}
+
+---
+
+### ALERTAS
 ${alerts.length > 0 
   ? alerts.map(a => `- **${a.severity.toUpperCase()}**: ${a.description}`).join('\n')
-  : '✅ Sin alertas críticas'
+  : '✅ Sin alertas'
 }`;
 };
 
