@@ -363,32 +363,30 @@ const processRow = (
   
   // Only count income/expenses if NOT other movement (transfers, etc.)
   if (!isOtherMovement) {
-    // Income
-    if (productSales > 0) metrics.productSales += productSales;
-    if (productSalesTax > 0) metrics.productSalesTax += productSalesTax;
-    if (shippingCredits > 0) metrics.shippingCredits += shippingCredits;
-    if (shippingCreditsTax > 0) metrics.shippingCreditsTax += shippingCreditsTax;
-    if (giftwrapCredits > 0) metrics.giftwrapCredits += giftwrapCredits;
-    if (giftwrapCreditsTax > 0) metrics.giftwrapCreditsTax += giftwrapCreditsTax;
-    if (marketplaceWithheldTax > 0) metrics.taxCollected += marketplaceWithheldTax;
-    
-    // Promotional rebates (usually negative)
+    // Income columns - sum ALL values (positive and negative)
+    metrics.productSales += productSales;
+    metrics.productSalesTax += productSalesTax;
+    metrics.shippingCredits += shippingCredits;
+    metrics.shippingCreditsTax += shippingCreditsTax;
+    metrics.giftwrapCredits += giftwrapCredits;
+    metrics.giftwrapCreditsTax += giftwrapCreditsTax;
+    metrics.taxCollected += marketplaceWithheldTax;
     metrics.promotionalRebates += promotionalRebates;
     metrics.promotionalRebatesTax += promotionalRebatesTax;
     
-    // Expenses (keep as-is, they're already negative)
+    // Expense columns - keep as-is (already negative in file)
     metrics.sellingFees += sellingFees;
     metrics.fbaFees += fbaFees;
     metrics.otherTransactionFees += otherTransactionFees;
     metrics.otherFees += otherFees;
     
-    // Refunds
+    // Track refunds separately for analysis
     if (isRefund) {
       metrics.refundCount++;
       metrics.totalRefunds += Math.abs(productSales);
     }
   } else {
-    // Track other movements separately
+    // Track other movements separately (transfers, etc.)
     metrics.otherMovements += rowTotal;
   }
   
@@ -535,24 +533,29 @@ const processRow = (
 
 // Finalize metrics after all rows processed
 const finalizeMetrics = (metrics: AggregatedMetrics): void => {
-  // Calculate gross sales (sum of all positive income)
+  // INGRESOS TOTALES: suma de TODAS las columnas de ingresos
+  // (productSales + productSalesTax + shippingCredits + shippingCreditsTax + 
+  //  giftwrapCredits + giftwrapCreditsTax + promotionalRebates + promotionalRebatesTax + taxCollected)
   metrics.grossSales = metrics.productSales + metrics.productSalesTax + 
                        metrics.shippingCredits + metrics.shippingCreditsTax +
                        metrics.giftwrapCredits + metrics.giftwrapCreditsTax +
+                       metrics.promotionalRebates + metrics.promotionalRebatesTax +
                        metrics.taxCollected;
   
-  // Total fees (sum of negative expenses, as absolute value)
-  metrics.totalFees = Math.abs(metrics.sellingFees + metrics.fbaFees + 
-                               metrics.otherTransactionFees + metrics.otherFees);
+  // GASTOS TOTALES: suma directa de las 4 columnas de gastos (ya son negativos)
+  // (sellingFees + fbaFees + otherTransactionFees + otherFees)
+  metrics.totalFees = metrics.sellingFees + metrics.fbaFees + 
+                      metrics.otherTransactionFees + metrics.otherFees;
   
-  // Net sales (gross + promotional rebates - refunds)
-  metrics.netSales = metrics.grossSales + metrics.promotionalRebates - metrics.totalRefunds;
+  // Net sales = Ingresos sin los tax/rebates (solo ventas de producto)
+  metrics.netSales = metrics.productSales;
   
-  // EBITDA = Net sales - Fees + Reimbursements (EXCLUDING other movements)
-  metrics.ebitda = metrics.netSales - metrics.totalFees + metrics.totalReimbursements;
+  // EBITDA = Ingresos + Gastos (gastos ya son negativos) + Reembolsos
+  // EXCLUYE otros movimientos (transferencias)
+  metrics.ebitda = metrics.grossSales + metrics.totalFees + metrics.totalReimbursements;
   
-  // Calculated total for comparison
-  metrics.calculatedTotal = metrics.ebitda;
+  // Calculated total for comparison (should match actualTotal - otherMovements)
+  metrics.calculatedTotal = metrics.grossSales + metrics.totalFees;
   
   // Calculate USD values
   const avgExchangeRate = EXCHANGE_RATES['EUR'] || 1;
@@ -560,7 +563,7 @@ const finalizeMetrics = (metrics: AggregatedMetrics): void => {
   metrics.netSalesUSD = metrics.netSales * avgExchangeRate;
   
   // Calculate percentages
-  metrics.feePercent = metrics.netSales > 0 ? (metrics.totalFees / metrics.netSales) * 100 : 0;
+  metrics.feePercent = metrics.grossSales > 0 ? (Math.abs(metrics.totalFees) / metrics.grossSales) * 100 : 0;
   metrics.refundRate = metrics.grossSales > 0 ? (metrics.totalRefunds / metrics.grossSales) * 100 : 0;
   
   // Finalize marketplace metrics
