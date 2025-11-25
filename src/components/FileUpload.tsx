@@ -1,15 +1,18 @@
 import { useState, useCallback } from 'react';
 import { Upload, FileSpreadsheet, AlertCircle, Loader2, X, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 
 interface FileUploadProps {
   onFilesSelect: (files: File[]) => void;
   isProcessing: boolean;
   error: string | null;
+  progress?: number;
+  rowsProcessed?: number;
 }
 
-const FileUpload = ({ onFilesSelect, isProcessing, error }: FileUploadProps) => {
+const FileUpload = ({ onFilesSelect, isProcessing, error, progress = 0, rowsProcessed = 0 }: FileUploadProps) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
@@ -83,13 +86,17 @@ const FileUpload = ({ onFilesSelect, isProcessing, error }: FileUploadProps) => 
               <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center">
                 <Loader2 className="w-10 h-10 text-primary animate-spin" />
               </div>
-              <div className="text-center">
+              <div className="text-center w-full max-w-xs">
                 <p className="text-lg font-medium text-foreground">
                   Analizando {selectedFiles.length} archivo{selectedFiles.length > 1 ? 's' : ''}...
                 </p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  CEO Brain procesando datos
-                </p>
+                <div className="mt-4 space-y-2">
+                  <Progress value={progress} className="h-2" />
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>{rowsProcessed.toLocaleString()} filas procesadas</span>
+                    <span>{Math.round(progress)}%</span>
+                  </div>
+                </div>
               </div>
             </>
           ) : (
