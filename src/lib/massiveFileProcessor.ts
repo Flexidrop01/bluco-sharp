@@ -154,11 +154,8 @@ export interface FulfillmentAggregates {
   model: string;
   grossSales: number;        // Ventas SIN IVA (solo productSales)
   salesWithTax: number;      // Ventas CON IVA (productSales + productSalesTax)
-  fees: number;              // Total fees
-  sellingFees: number;       // Comisiones de venta
-  sellingFeesRefund: number; // Reembolso de comisiones (positivo)
-  fbaFees: number;           // Tarifas logísticas FBA (solo para FBA)
-  refunds: number;           // Reembolsos CON IVA (valor absoluto)
+  fees: number;
+  refunds: number;           // Reembolsos CON IVA
   transactionCount: number;
 }
 
@@ -408,29 +405,18 @@ const processRow = (
   }
   
   // === TRANSACTION TYPE BREAKDOWN ===
-  // Clasificar por rowTotal: negativo = expense, positivo = income, 0 = other
-  // IMPORTANTE: La categoría real se determina por el valor, no por el nombre del tipo
-  const actualCategory: 'income' | 'expense' | 'other' = 
-    isOtherMovement ? 'other' :
-    rowTotal < 0 ? 'expense' : 
-    rowTotal > 0 ? 'income' : 'other';
-  
   metrics.byTransactionType.set(transactionType, (metrics.byTransactionType.get(transactionType) || 0) + 1);
   
   if (!metrics.byTransactionTypeDetail.has(transactionType)) {
     metrics.byTransactionTypeDetail.set(transactionType, {
       type: transactionType,
-      category: actualCategory,  // Usar la categoría real basada en el valor
+      category: transactionCategory,
       count: 0,
       totalAmount: 0,
       descriptions: new Map()
     });
   }
   const txDetail = metrics.byTransactionTypeDetail.get(transactionType)!;
-  // Actualizar la categoría si esta transacción define mejor el tipo
-  if (txDetail.category === 'other' && actualCategory !== 'other') {
-    txDetail.category = actualCategory;
-  }
   txDetail.count++;
   txDetail.totalAmount += rowTotal;
   if (description) {
@@ -508,39 +494,19 @@ const processRow = (
     if (!metrics.byFulfillment.has(fulfillmentModel)) {
       metrics.byFulfillment.set(fulfillmentModel, { 
         model: fulfillmentModel, 
-        grossSales: 0,         // Sin IVA
-        salesWithTax: 0,       // Con IVA
-        fees: 0,
-        sellingFees: 0,        // Comisiones de venta (negativas)
-        sellingFeesRefund: 0,  // Reembolso de comisiones (positivas)
-        fbaFees: 0,            // Tarifas FBA
+        grossSales: 0,      // Sin IVA
+        salesWithTax: 0,    // Con IVA
+        fees: 0, 
         refunds: 0, 
         transactionCount: 0 
       });
     }
     const fulfillmentData = metrics.byFulfillment.get(fulfillmentModel)!;
-    
-    // Ventas CON IVA
     if (!isRefund && productSales > 0) {
       fulfillmentData.grossSales += productSales;
       fulfillmentData.salesWithTax += (productSales + productSalesTax);
     }
-    
-    // Fees totales
     fulfillmentData.fees += (sellingFees + fbaFees + otherTransactionFees + otherFees);
-    
-    // Separar comisiones: negativas = cobro, positivas = reembolso
-    if (sellingFees < 0) {
-      fulfillmentData.sellingFees += sellingFees; // Acumula negativo
-    } else if (sellingFees > 0) {
-      fulfillmentData.sellingFeesRefund += sellingFees; // Reembolso (positivo)
-    }
-    
-    // FBA fees solo para FBA
-    if (fulfillmentModel === 'FBA') {
-      fulfillmentData.fbaFees += fbaFees;
-    }
-    
     // Reembolsos CON IVA
     if (isRefund) fulfillmentData.refunds += Math.abs(productSales + productSalesTax);
     fulfillmentData.transactionCount++;

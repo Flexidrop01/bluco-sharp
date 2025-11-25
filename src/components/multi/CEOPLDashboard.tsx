@@ -42,13 +42,6 @@ const CEOPLDashboard = ({ metrics }: CEOPLDashboardProps) => {
   const ventasFBM = fbmData?.salesWithTax || 0;    // CON IVA
   const refundsFBM = fbmData?.refunds || 0;        // CON IVA (ya corregido en processor)
   
-  // === COMISIONES SEPARADAS POR FULFILLMENT ===
-  const comisionVentasFBM = fbmData?.sellingFees || 0;     // Negativo
-  const reembolsoComisionesFBM = fbmData?.sellingFeesRefund || 0; // Positivo
-  const comisionVentasFBA = fbaData?.sellingFees || 0;     // Negativo
-  const reembolsoComisionesFBA = fbaData?.sellingFeesRefund || 0; // Positivo
-  const comisionesFBALogistica = fbaData?.fbaFees || 0;    // Tarifas logísticas FBA
-  
   // Desglose de gastos
   const comisionesVentas = metrics.sellingFees;
   const comisionesFBA = metrics.fbaFees;
@@ -219,32 +212,11 @@ const CEOPLDashboard = ({ metrics }: CEOPLDashboardProps) => {
                   <TableCell colSpan={2} className="h-2"></TableCell>
                 </TableRow>
                 
-                {/* Comisiones por ventas - Total */}
+                {/* Comisiones por ventas */}
                 <TableRow>
-                  <TableCell className="font-medium">Comisiones por Ventas (Total)</TableCell>
+                  <TableCell className="font-medium">Comisiones por Ventas</TableCell>
                   <TableCell className="text-right text-red-500">{formatEUR(comisionesVentas)}</TableCell>
                 </TableRow>
-                
-                {/* Desglose FBM */}
-                <TableRow className="bg-orange-500/5">
-                  <TableCell className="pl-6 text-muted-foreground">Comisión Ventas FBM</TableCell>
-                  <TableCell className="text-right text-red-500">{formatEUR(comisionVentasFBM)}</TableCell>
-                </TableRow>
-                <TableRow className="bg-orange-500/5">
-                  <TableCell className="pl-6 text-muted-foreground">Reembolso Comisiones FBM</TableCell>
-                  <TableCell className="text-right text-green-500">{formatEUR(reembolsoComisionesFBM)}</TableCell>
-                </TableRow>
-                
-                {/* Desglose FBA */}
-                <TableRow className="bg-blue-500/5">
-                  <TableCell className="pl-6 text-muted-foreground">Comisión Ventas FBA</TableCell>
-                  <TableCell className="text-right text-red-500">{formatEUR(comisionVentasFBA)}</TableCell>
-                </TableRow>
-                <TableRow className="bg-blue-500/5">
-                  <TableCell className="pl-6 text-muted-foreground">Reembolso Comisiones FBA</TableCell>
-                  <TableCell className="text-right text-green-500">{formatEUR(reembolsoComisionesFBA)}</TableCell>
-                </TableRow>
-                
                 <TableRow>
                   <TableCell className="pl-8 text-muted-foreground text-sm">% sobre ventas sin IVA</TableCell>
                   <TableCell className="text-right text-muted-foreground text-sm">
@@ -252,17 +224,13 @@ const CEOPLDashboard = ({ metrics }: CEOPLDashboardProps) => {
                   </TableCell>
                 </TableRow>
                 
-                {/* Comisiones FBA Logística */}
+                {/* Comisiones FBA */}
                 <TableRow className="border-t border-border">
                   <TableCell className="font-medium">Comisiones Logística FBA</TableCell>
                   <TableCell className="text-right text-red-500">{formatEUR(comisionesFBA)}</TableCell>
                 </TableRow>
-                <TableRow className="bg-blue-500/5">
-                  <TableCell className="pl-6 text-muted-foreground">Gasto logística FBA</TableCell>
-                  <TableCell className="text-right text-red-500">{formatEUR(comisionesFBALogistica)}</TableCell>
-                </TableRow>
                 <TableRow>
-                  <TableCell className="pl-8 text-muted-foreground text-sm">% sobre ventas FBA con IVA</TableCell>
+                  <TableCell className="pl-8 text-muted-foreground text-sm">% sobre ventas FBA</TableCell>
                   <TableCell className="text-right text-muted-foreground text-sm">
                     {ventasFBA > 0 ? ((Math.abs(comisionesFBA) / ventasFBA) * 100).toFixed(2) : 0}%
                   </TableCell>

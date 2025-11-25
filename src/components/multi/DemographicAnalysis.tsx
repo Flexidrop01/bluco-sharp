@@ -147,7 +147,7 @@ const DemographicAnalysis = ({ byCity, byRegion }: DemographicAnalysisProps) => 
           <CardContent>
             <div className="space-y-2 max-h-[400px] overflow-y-auto">
               {sortedCities.map((city, index) => (
-                <div key={`city-${index}-${city.city}`} className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+                <div key={`${city.city}-${city.country}`} className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
                   <div className="flex items-center gap-3">
                     <span className="w-6 h-6 rounded-full bg-multi/20 text-multi text-xs font-bold flex items-center justify-center">
                       {index + 1}
@@ -178,7 +178,7 @@ const DemographicAnalysis = ({ byCity, byRegion }: DemographicAnalysisProps) => 
           <CardContent>
             <div className="space-y-2 max-h-[400px] overflow-y-auto">
               {sortedRegions.map((region, index) => (
-                <div key={`region-${index}-${region.region}`} className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+                <div key={`${region.region}-${region.country}`} className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
                   <div className="flex items-center gap-3">
                     <span className="w-6 h-6 rounded-full bg-primary/20 text-primary text-xs font-bold flex items-center justify-center">
                       {index + 1}
@@ -209,17 +209,17 @@ const DemographicAnalysis = ({ byCity, byRegion }: DemographicAnalysisProps) => 
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {sortedCities.slice(0, 6).map((city, cityIndex) => (
-              <div key={`products-${cityIndex}-${city.city}`} className="p-3 rounded-lg bg-muted/30">
+            {sortedCities.slice(0, 6).map((city) => (
+              <div key={`${city.city}-products`} className="p-3 rounded-lg bg-muted/30">
                 <div className="flex items-center justify-between mb-2">
                   <span className="font-medium text-sm">{city.city}</span>
                   <Badge variant="outline" className="text-[10px]">{city.country}</Badge>
                 </div>
                 <div className="space-y-1">
-                  {city.topSKUs.slice(0, 3).map((sku, skuIndex) => (
-                    <div key={`${cityIndex}-sku-${skuIndex}`} className="flex items-center justify-between text-xs">
+                  {city.topSKUs.slice(0, 3).map((sku, i) => (
+                    <div key={`${city.city}-${sku.sku}`} className="flex items-center justify-between text-xs">
                       <span className="truncate max-w-[150px] text-muted-foreground" title={sku.description || sku.sku}>
-                        {skuIndex + 1}. {sku.sku}
+                        {i + 1}. {sku.sku}
                       </span>
                       <span className="font-medium">${sku.sales.toLocaleString()}</span>
                     </div>
