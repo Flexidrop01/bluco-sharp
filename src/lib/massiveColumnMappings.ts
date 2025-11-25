@@ -376,14 +376,33 @@ export const isHeaderRow = (row: string[]): boolean => {
   return matches >= 3; // At least 3 header indicators
 };
 
-// Find the standardized column name
+// Find the standardized column name - PRIORIZA COINCIDENCIAS EXACTAS Y PATRONES MÁS LARGOS
 export const findStandardColumn = (header: string): string | null => {
   const normalized = header.toLowerCase().trim();
   
+  // FASE 1: Buscar coincidencias EXACTAS primero
   for (const [standard, patterns] of Object.entries(UNIVERSAL_COLUMN_MAP)) {
     for (const pattern of patterns) {
-      // Exact match or partial match
-      if (normalized === pattern || normalized.includes(pattern) || pattern.includes(normalized)) {
+      if (normalized === pattern) {
+        return standard;
+      }
+    }
+  }
+  
+  // FASE 2: Buscar coincidencias parciales, pero priorizando patrones más largos (más específicos)
+  // Ordenar entradas por la longitud del patrón más largo (descendente)
+  const sortedEntries = Object.entries(UNIVERSAL_COLUMN_MAP)
+    .map(([standard, patterns]) => ({
+      standard,
+      patterns,
+      maxLength: Math.max(...patterns.map(p => p.length))
+    }))
+    .sort((a, b) => b.maxLength - a.maxLength);
+  
+  for (const { standard, patterns } of sortedEntries) {
+    for (const pattern of patterns.sort((a, b) => b.length - a.length)) {
+      // Solo coincidencias donde el header contiene el patrón
+      if (normalized.includes(pattern)) {
         return standard;
       }
     }
