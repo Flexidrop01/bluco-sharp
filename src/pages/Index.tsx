@@ -24,6 +24,8 @@ const Index = () => {
   const [mode, setMode] = useState<AnalysisMode>('ceo');
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [rowsProcessed, setRowsProcessed] = useState(0);
   const [singleAnalysis, setSingleAnalysis] = useState<AnalysisResult | null>(null);
   const [multiAnalysis, setMultiAnalysis] = useState<MultiAnalysisResult | null>(null);
   const [idqAnalysis, setIdqAnalysis] = useState<IDQAnalysisResult | null>(null);
@@ -32,12 +34,24 @@ const Index = () => {
   const handleCEOFilesSelect = useCallback(async (files: File[]) => {
     setIsProcessing(true);
     setError(null);
+    setProgress(0);
+    setRowsProcessed(0);
     
     try {
+      let totalRowsProcessed = 0;
+      const totalFiles = files.length;
+      
       // Process all files with the massive processor
       const allMetrics = await Promise.all(
-        files.map(async (file) => {
-          const metrics = await processMassiveFile(file);
+        files.map(async (file, fileIndex) => {
+          const metrics = await processMassiveFile(file, (fileProgress) => {
+            // Calculate overall progress across all files
+            const baseProgress = (fileIndex / totalFiles) * 100;
+            const fileContribution = (fileProgress / totalFiles);
+            setProgress(baseProgress + fileContribution);
+          });
+          totalRowsProcessed += metrics.totalRows;
+          setRowsProcessed(totalRowsProcessed);
           return { file, metrics };
         })
       );
@@ -189,6 +203,8 @@ const Index = () => {
                 onFilesSelect={handleCEOFilesSelect}
                 isProcessing={isProcessing}
                 error={error}
+                progress={progress}
+                rowsProcessed={rowsProcessed}
               />
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
