@@ -5,20 +5,22 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { 
   ArrowLeft, Download, Globe, BarChart3, Layers, 
-  AlertTriangle, Target, Package, FileText, MapPin, Receipt
+  AlertTriangle, Target, Package, FileText, MapPin, Receipt, Calculator
 } from 'lucide-react';
 import GlobalSummary from './GlobalSummary';
 import CountryBreakdown from './CountryBreakdown';
 import DemographicAnalysis from './DemographicAnalysis';
 import SKURanking from './SKURanking';
 import TransactionTypeBreakdown from './TransactionTypeBreakdown';
+import { PLDashboard, PLMetrics } from './PLDashboard';
 
 interface MultiDashboardProps {
   analysis: MultiAnalysisResult;
+  plMetrics?: PLMetrics;
   onReset: () => void;
 }
 
-const MultiDashboard = ({ analysis, onReset }: MultiDashboardProps) => {
+const MultiDashboard = ({ analysis, plMetrics, onReset }: MultiDashboardProps) => {
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat('es-ES', {
       dateStyle: 'long',
@@ -124,6 +126,10 @@ const MultiDashboard = ({ analysis, onReset }: MultiDashboardProps) => {
           <TabsTrigger value="fees" className="flex items-center gap-2">
             <BarChart3 className="w-4 h-4" />
             Fees
+          </TabsTrigger>
+          <TabsTrigger value="pl" className="flex items-center gap-2">
+            <Calculator className="w-4 h-4" />
+            <span className="hidden sm:inline">P&L</span>
           </TabsTrigger>
           <TabsTrigger value="alerts" className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4" />
@@ -235,6 +241,19 @@ const MultiDashboard = ({ analysis, onReset }: MultiDashboardProps) => {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="pl">
+          {plMetrics ? (
+            <PLDashboard metrics={plMetrics} currency="USD" period={`${analysis.files[0]?.fileName || 'Análisis'}`} />
+          ) : (
+            <Card className="glass-card">
+              <CardContent className="p-8 text-center">
+                <Calculator className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">P&L se genera automáticamente al procesar archivos de transacciones</p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="skus">
