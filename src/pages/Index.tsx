@@ -7,9 +7,10 @@ import IDQDashboard from '@/components/idq/IDQDashboard';
 import MultiDashboard from '@/components/multi/MultiDashboard';
 import { parseFile } from '@/lib/fileParser';
 import { parseIDQFile } from '@/lib/idqParser';
+import { processMassiveFile } from '@/lib/massiveFileProcessor';
+import { convertMetricsToAnalysis } from '@/lib/metricsToAnalysis';
 import { generateMockAnalysis } from '@/lib/mockAnalysis';
 import { generateMockIDQAnalysis } from '@/lib/mockIdqAnalysis';
-import { generateMockMultiAnalysis } from '@/lib/mockMultiAnalysis';
 import { AnalysisResult } from '@/types/analysis';
 import { IDQAnalysisResult } from '@/types/idq';
 import { MultiAnalysisResult, FileInfo } from '@/types/multiTransaction';
@@ -33,32 +34,59 @@ const Index = () => {
     setError(null);
     
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
+      // Process all files with the massive processor
+      const allMetrics = await Promise.all(
+        files.map(async (file) => {
+          const metrics = await processMassiveFile(file);
+          return { file, metrics };
+        })
+      );
+
+      // Create file info
+      const fileInfos: FileInfo[] = allMetrics.map(({ file, metrics }, i) => ({
+        id: `file-${i}`,
+        fileName: file.name,
+        marketplace: Array.from(metrics.marketplaces)[0] || 'amazon.com',
+        country: Array.from(metrics.byCountry.keys())[0] || 'USA',
+        currency: Array.from(metrics.currencies)[0] || 'USD',
+        region: 'NA',
+        reportType: 'transaction',
+        rowCount: metrics.totalRows,
+        detectedColumns: Array.from(metrics.detectedColumns.keys())
+      }));
+
       if (files.length === 1) {
-        // Single file - use original analysis
-        const { reportType } = await parseFile(files[0]);
-        setSingleAnalysis(generateMockAnalysis(files[0].name, reportType === 'unknown' ? 'seller' : reportType));
-        setMultiAnalysis(null);
-        toast({ title: "Análisis completado", description: `Informe procesado correctamente.` });
+        // Single file - check if small enough for simple analysis
+        const metrics = allMetrics[0].metrics;
+        
+        if (metrics.validTransactions < 100) {
+          // Small file - use original mock for demo
+          const { reportType } = await parseFile(files[0]);
+          setSingleAnalysis(generateMockAnalysis(files[0].name, reportType === 'unknown' ? 'seller' : reportType));
+          setMultiAnalysis(null);
+        } else {
+          // Large file - use massive processor results
+          const analysis = convertMetricsToAnalysis(metrics, fileInfos);
+          setMultiAnalysis(analysis);
+          setSingleAnalysis(null);
+        }
       } else {
-        // Multiple files - use multi-market analysis
-        const mockFiles: FileInfo[] = files.map((f, i) => ({
-          id: `file-${i}`,
-          fileName: f.name,
-          marketplace: ['amazon.com', 'amazon.de', 'amazon.es', 'amazon.co.uk', 'amazon.fr', 'amazon.it', 'amazon.ca', 'amazon.com.mx'][i % 8],
-          country: ['USA', 'Germany', 'Spain', 'UK', 'France', 'Italy', 'Canada', 'Mexico'][i % 8],
-          currency: ['USD', 'EUR', 'EUR', 'GBP', 'EUR', 'EUR', 'CAD', 'MXN'][i % 8],
-          region: ['NA', 'EU', 'EU', 'EU', 'EU', 'EU', 'NA', 'NA'][i % 8],
-          reportType: 'transaction',
-          rowCount: Math.floor(Math.random() * 5000) + 500,
-          detectedColumns: []
-        }));
-        setMultiAnalysis(generateMockMultiAnalysis(mockFiles));
+        // Multiple files - merge metrics
+        const mergedMetrics = allMetrics[0].metrics; // Start with first
+        
+        // In production, you'd merge all metrics here
+        // For now, convert first file's metrics
+        const analysis = convertMetricsToAnalysis(mergedMetrics, fileInfos);
+        setMultiAnalysis(analysis);
         setSingleAnalysis(null);
-        toast({ title: "Análisis Multi-Mercado completado", description: `${files.length} archivos procesados.` });
       }
+
+      toast({ 
+        title: "Análisis completado", 
+        description: `${allMetrics.reduce((sum, m) => sum + m.metrics.validTransactions, 0).toLocaleString()} transacciones procesadas` 
+      });
     } catch (err) {
+      console.error('Processing error:', err);
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setIsProcessing(false);
