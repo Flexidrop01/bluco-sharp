@@ -121,15 +121,48 @@ export interface FeeTypeMetrics {
 export interface SKUMetrics {
   sku: string;
   asin?: string;
+  description?: string;
   totalSales: number;
   totalFees: number;
   feePercent: number;
   totalRefunds: number;
   refundRate: number;
+  quantity: number;
   countries: string[];
+  cities: string[];
   fulfillmentModel: FulfillmentModel;
   profit: number;
   profitMargin: number;
+}
+
+export interface CityMetrics {
+  city: string;
+  region: string;
+  country: string;
+  postalCode?: string;
+  totalSales: number;
+  transactionCount: number;
+  topSKUs: { sku: string; sales: number; description?: string }[];
+}
+
+export interface RegionMetrics {
+  region: string;
+  country: string;
+  totalSales: number;
+  transactionCount: number;
+  cityCount: number;
+  topCities: string[];
+}
+
+export interface TransactionTypeMetrics {
+  type: string;
+  count: number;
+  totalAmount: number;
+  percentOfTotal: number;
+  fulfillmentBreakdown: {
+    fba: { count: number; amount: number };
+    fbm: { count: number; amount: number };
+  };
 }
 
 export interface DiscrepancyAlert {
@@ -161,14 +194,22 @@ export interface MultiAnalysisResult {
     transactionCount: number;
     skuCount: number;
     countriesCount: number;
+    fbaVsFbm: {
+      fba: { sales: number; fees: number; refunds: number; transactions: number };
+      fbm: { sales: number; fees: number; refunds: number; transactions: number };
+    };
   };
   
   // Breakdowns
   byCountry: CountryMetrics[];
   byModel: ModelMetrics[];
   byFeeType: FeeTypeMetrics[];
+  byTransactionType: TransactionTypeMetrics[];
+  byCity: CityMetrics[];
+  byRegion: RegionMetrics[];
   topSKUs: SKUMetrics[];
   bottomSKUs: SKUMetrics[];
+  allSKUs: SKUMetrics[];
   
   // Alerts
   alerts: DiscrepancyAlert[];

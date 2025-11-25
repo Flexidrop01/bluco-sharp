@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { MultiAnalysisResult } from '@/types/multiTransaction';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -6,10 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { 
   ArrowLeft, Download, Globe, BarChart3, Layers, 
-  AlertTriangle, Target, Package, FileText
+  AlertTriangle, Target, Package, FileText, MapPin, Receipt
 } from 'lucide-react';
 import GlobalSummary from './GlobalSummary';
 import CountryBreakdown from './CountryBreakdown';
+import DemographicAnalysis from './DemographicAnalysis';
+import SKURanking from './SKURanking';
+import TransactionTypeBreakdown from './TransactionTypeBreakdown';
 
 interface MultiDashboardProps {
   analysis: MultiAnalysisResult;
@@ -102,25 +104,26 @@ const MultiDashboard = ({ analysis, onReset }: MultiDashboardProps) => {
 
       {/* Main Tabs */}
       <Tabs defaultValue="countries" className="space-y-4">
-        <TabsList className="glass-card p-1 w-full justify-start overflow-x-auto">
+        <TabsList className="glass-card p-1 w-full justify-start overflow-x-auto flex-wrap">
           <TabsTrigger value="countries" className="flex items-center gap-2">
             <Globe className="w-4 h-4" />
             <span className="hidden sm:inline">Por País</span>
-            <span className="sm:hidden">Países</span>
           </TabsTrigger>
-          <TabsTrigger value="models" className="flex items-center gap-2">
-            <Layers className="w-4 h-4" />
-            <span className="hidden sm:inline">Por Modelo</span>
-            <span className="sm:hidden">Modelos</span>
+          <TabsTrigger value="demographic" className="flex items-center gap-2">
+            <MapPin className="w-4 h-4" />
+            <span className="hidden sm:inline">Demográfico</span>
           </TabsTrigger>
-          <TabsTrigger value="fees" className="flex items-center gap-2">
-            <BarChart3 className="w-4 h-4" />
-            <span className="hidden sm:inline">Por Fee</span>
-            <span className="sm:hidden">Fees</span>
+          <TabsTrigger value="transactions" className="flex items-center gap-2">
+            <Receipt className="w-4 h-4" />
+            <span className="hidden sm:inline">Transacciones</span>
           </TabsTrigger>
           <TabsTrigger value="skus" className="flex items-center gap-2">
             <Package className="w-4 h-4" />
             SKUs
+          </TabsTrigger>
+          <TabsTrigger value="fees" className="flex items-center gap-2">
+            <BarChart3 className="w-4 h-4" />
+            Fees
           </TabsTrigger>
           <TabsTrigger value="alerts" className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4" />
@@ -139,6 +142,18 @@ const MultiDashboard = ({ analysis, onReset }: MultiDashboardProps) => {
 
         <TabsContent value="countries">
           <CountryBreakdown countries={analysis.byCountry} />
+        </TabsContent>
+
+        <TabsContent value="demographic">
+          <DemographicAnalysis byCity={analysis.byCity || []} byRegion={analysis.byRegion || []} />
+        </TabsContent>
+
+        <TabsContent value="transactions">
+          <TransactionTypeBreakdown byTransactionType={analysis.byTransactionType || []} fbaVsFbm={analysis.global.fbaVsFbm} />
+        </TabsContent>
+
+        <TabsContent value="skus">
+          <SKURanking allSKUs={analysis.allSKUs || []} topSKUs={analysis.topSKUs} bottomSKUs={analysis.bottomSKUs} />
         </TabsContent>
 
         <TabsContent value="models">

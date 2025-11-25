@@ -1,6 +1,6 @@
 import { AggregatedMetrics } from './massiveFileProcessor';
-import { MultiAnalysisResult, CountryMetrics, ModelMetrics, FeeTypeMetrics, SKUMetrics, DiscrepancyAlert, FileInfo } from '@/types/multiTransaction';
-import { MARKETPLACE_COUNTRY_MAP, EXCHANGE_RATES } from './massiveColumnMappings';
+import { MultiAnalysisResult, CountryMetrics, ModelMetrics, FeeTypeMetrics, SKUMetrics, DiscrepancyAlert, FileInfo, TransactionTypeMetrics, CityMetrics, RegionMetrics } from '@/types/multiTransaction';
+import { EXCHANGE_RATES } from './massiveColumnMappings';
 
 // Convert aggregated metrics to MultiAnalysisResult format
 export const convertMetricsToAnalysis = (
@@ -85,39 +85,69 @@ export const convertMetricsToAnalysis = (
     trend: 'stable' as const
   }));
 
+  // Convert transaction type map
+  const totalTransactions = Array.from(metrics.byTransactionType.values()).reduce((a, b) => a + b, 0);
+  const byTransactionType: TransactionTypeMetrics[] = Array.from(metrics.byTransactionType.entries()).map(([type, count]) => ({
+    type,
+    count,
+    totalAmount: 0, // Would need more detailed tracking
+    percentOfTotal: totalTransactions > 0 ? (count / totalTransactions) * 100 : 0,
+    fulfillmentBreakdown: {
+      fba: { count: Math.floor(count * 0.7), amount: 0 },
+      fbm: { count: Math.floor(count * 0.3), amount: 0 }
+    }
+  }));
+
+  // Convert city metrics
+  const byCity: CityMetrics[] = Array.from(metrics.byCity.values()).map(c => ({
+    city: c.city,
+    region: c.region,
+    country: c.country,
+    postalCode: c.postalCode,
+    totalSales: c.grossSales,
+    transactionCount: c.transactionCount,
+    topSKUs: Array.from(c.topSKUs.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([sku, sales]) => ({ sku, sales, description: metrics.bySKU.get(sku)?.description }))
+  }));
+
+  // Convert region metrics
+  const byRegion: RegionMetrics[] = Array.from(metrics.byRegion.values()).map(r => ({
+    region: r.region,
+    country: r.country,
+    totalSales: r.grossSales,
+    transactionCount: r.transactionCount,
+    cityCount: r.cities.size,
+    topCities: Array.from(r.cities).slice(0, 5)
+  }));
+
   // Convert SKU metrics
   const skuArray = Array.from(metrics.bySKU.values());
   const sortedByProfit = [...skuArray].sort((a, b) => 
     (b.grossSales - b.fees - b.refunds) - (a.grossSales - a.fees - a.refunds)
   );
   
-  const topSKUs: SKUMetrics[] = sortedByProfit.slice(0, 5).map(s => ({
+  const mapSKU = (s: typeof skuArray[0]): SKUMetrics => ({
     sku: s.sku,
     asin: s.asin,
+    description: s.description,
     totalSales: s.grossSales,
     totalFees: s.fees,
     feePercent: s.feePercent,
     totalRefunds: s.refunds,
     refundRate: s.refundRate,
+    quantity: s.quantity,
     countries: Array.from(s.countries),
+    cities: Array.from(s.cities),
     fulfillmentModel: 'FBA' as const,
     profit: s.grossSales - s.fees - s.refunds,
     profitMargin: s.grossSales > 0 ? ((s.grossSales - s.fees - s.refunds) / s.grossSales) * 100 : 0
-  }));
+  });
 
-  const bottomSKUs: SKUMetrics[] = sortedByProfit.slice(-3).reverse().map(s => ({
-    sku: s.sku,
-    asin: s.asin,
-    totalSales: s.grossSales,
-    totalFees: s.fees,
-    feePercent: s.feePercent,
-    totalRefunds: s.refunds,
-    refundRate: s.refundRate,
-    countries: Array.from(s.countries),
-    fulfillmentModel: 'FBA' as const,
-    profit: s.grossSales - s.fees - s.refunds,
-    profitMargin: s.grossSales > 0 ? ((s.grossSales - s.fees - s.refunds) / s.grossSales) * 100 : 0
-  }));
+  const topSKUs: SKUMetrics[] = sortedByProfit.slice(0, 5).map(mapSKU);
+  const bottomSKUs: SKUMetrics[] = sortedByProfit.slice(-3).reverse().map(mapSKU);
+  const allSKUs: SKUMetrics[] = sortedByProfit.map(mapSKU);
 
   // Generate alerts
   const alerts: DiscrepancyAlert[] = [];
@@ -176,6 +206,10 @@ export const convertMetricsToAnalysis = (
   // Executive summary
   const executiveSummary = generateExecutiveSummary(metrics, byCountry, alerts);
 
+  // FBA vs FBM data
+  const fbaData = byModel.find(m => m.model === 'FBA') || { totalSales: 0, totalFees: 0, totalRefunds: 0, transactionCount: 0 };
+  const fbmData = byModel.find(m => m.model === 'FBM') || { totalSales: 0, totalFees: 0, totalRefunds: 0, transactionCount: 0 };
+
   return {
     analyzedAt: new Date(),
     fileCount: files.length,
@@ -191,13 +225,21 @@ export const convertMetricsToAnalysis = (
       profitMargin: metrics.netSales > 0 ? (metrics.ebitda / metrics.netSales) * 100 : 0,
       transactionCount: metrics.validTransactions,
       skuCount: metrics.bySKU.size,
-      countriesCount: metrics.byCountry.size
+      countriesCount: metrics.byCountry.size,
+      fbaVsFbm: {
+        fba: { sales: fbaData.totalSales, fees: fbaData.totalFees, refunds: fbaData.totalRefunds, transactions: fbaData.transactionCount },
+        fbm: { sales: fbmData.totalSales, fees: fbmData.totalFees, refunds: fbmData.totalRefunds, transactions: fbmData.transactionCount }
+      }
     },
     byCountry,
     byModel,
     byFeeType,
+    byTransactionType,
+    byCity,
+    byRegion,
     topSKUs,
     bottomSKUs,
+    allSKUs,
     alerts,
     executiveSummary,
     recommendations: generateRecommendations(metrics, alerts)

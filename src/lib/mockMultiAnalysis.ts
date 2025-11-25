@@ -6,7 +6,10 @@ import {
   FeeTypeMetrics,
   SKUMetrics,
   DiscrepancyAlert,
-  FulfillmentModel
+  FulfillmentModel,
+  TransactionTypeMetrics,
+  CityMetrics,
+  RegionMetrics
 } from '@/types/multiTransaction';
 
 const generateCountryMetrics = (country: string, marketplace: string, currency: string, salesBase: number): CountryMetrics => {
@@ -202,21 +205,57 @@ export const generateMockMultiAnalysis = (files: FileInfo[]): MultiAnalysisResul
       trend: 'stable'
     }
   ];
+
+  // Transaction Type breakdown
+  const byTransactionType: TransactionTypeMetrics[] = [
+    { type: 'Order', count: 14520, totalAmount: totalSalesUSD * 0.85, percentOfTotal: 70.7, fulfillmentBreakdown: { fba: { count: 10164, amount: totalSalesUSD * 0.6 }, fbm: { count: 4356, amount: totalSalesUSD * 0.25 } } },
+    { type: 'Refund', count: 1840, totalAmount: -totalRefundsUSD, percentOfTotal: 8.9, fulfillmentBreakdown: { fba: { count: 1196, amount: -totalRefundsUSD * 0.65 }, fbm: { count: 644, amount: -totalRefundsUSD * 0.35 } } },
+    { type: 'Transfer', count: 48, totalAmount: -netProfitUSD * 0.9, percentOfTotal: 0.2, fulfillmentBreakdown: { fba: { count: 48, amount: -netProfitUSD * 0.9 }, fbm: { count: 0, amount: 0 } } },
+    { type: 'Adjustment', count: 320, totalAmount: totalReimbursementsUSD, percentOfTotal: 1.6, fulfillmentBreakdown: { fba: { count: 320, amount: totalReimbursementsUSD }, fbm: { count: 0, amount: 0 } } },
+    { type: 'Service Fee', count: 890, totalAmount: -totalFeesUSD * 0.15, percentOfTotal: 4.3, fulfillmentBreakdown: { fba: { count: 623, amount: -totalFeesUSD * 0.1 }, fbm: { count: 267, amount: -totalFeesUSD * 0.05 } } },
+    { type: 'FBA Inventory Fee', count: 2420, totalAmount: -totalFeesUSD * 0.25, percentOfTotal: 11.8, fulfillmentBreakdown: { fba: { count: 2420, amount: -totalFeesUSD * 0.25 }, fbm: { count: 0, amount: 0 } } },
+    { type: 'Debt', count: 12, totalAmount: 842.50, percentOfTotal: 0.1, fulfillmentBreakdown: { fba: { count: 12, amount: 842.50 }, fbm: { count: 0, amount: 0 } } },
+  ];
+
+  // City metrics
+  const byCity: CityMetrics[] = [
+    { city: 'New York', region: 'NY', country: 'USA', postalCode: '10001', totalSales: 18500, transactionCount: 245, topSKUs: [{ sku: 'SKU-BEST-001', sales: 8200, description: 'Premium Product A' }, { sku: 'SKU-BEST-002', sales: 5400, description: 'Premium Product B' }] },
+    { city: 'Los Angeles', region: 'CA', country: 'USA', postalCode: '90001', totalSales: 15200, transactionCount: 198, topSKUs: [{ sku: 'SKU-BEST-001', sales: 6800, description: 'Premium Product A' }, { sku: 'SKU-MID-001', sales: 4200, description: 'Mid Range Product' }] },
+    { city: 'Chicago', region: 'IL', country: 'USA', postalCode: '60601', totalSales: 12800, transactionCount: 167, topSKUs: [{ sku: 'SKU-BEST-002', sales: 5600, description: 'Premium Product B' }] },
+    { city: 'Miami', region: 'FL', country: 'USA', postalCode: '33101', totalSales: 9800, transactionCount: 128, topSKUs: [{ sku: 'SKU-BEST-001', sales: 4200, description: 'Premium Product A' }] },
+    { city: 'Berlin', region: 'Berlin', country: 'Germany', postalCode: '10115', totalSales: 8500, transactionCount: 112, topSKUs: [{ sku: 'SKU-BEST-003', sales: 3800, description: 'Premium Product C' }] },
+    { city: 'London', region: 'England', country: 'UK', postalCode: 'SW1A', totalSales: 11200, transactionCount: 148, topSKUs: [{ sku: 'SKU-BEST-001', sales: 5200, description: 'Premium Product A' }] },
+    { city: 'Madrid', region: 'Madrid', country: 'Spain', postalCode: '28001', totalSales: 6800, transactionCount: 89, topSKUs: [{ sku: 'SKU-MID-002', sales: 2800, description: 'Mid Range Product' }] },
+    { city: 'Paris', region: 'Île-de-France', country: 'France', postalCode: '75001', totalSales: 7500, transactionCount: 98, topSKUs: [{ sku: 'SKU-BEST-002', sales: 3200, description: 'Premium Product B' }] },
+  ];
+
+  // Region metrics
+  const byRegion: RegionMetrics[] = [
+    { region: 'California', country: 'USA', totalSales: 28500, transactionCount: 372, cityCount: 12, topCities: ['Los Angeles', 'San Francisco', 'San Diego'] },
+    { region: 'New York', country: 'USA', totalSales: 22400, transactionCount: 292, cityCount: 8, topCities: ['New York', 'Buffalo', 'Albany'] },
+    { region: 'Florida', country: 'USA', totalSales: 18200, transactionCount: 238, cityCount: 9, topCities: ['Miami', 'Orlando', 'Tampa'] },
+    { region: 'Texas', country: 'USA', totalSales: 15800, transactionCount: 206, cityCount: 7, topCities: ['Houston', 'Dallas', 'Austin'] },
+    { region: 'England', country: 'UK', totalSales: 28500, transactionCount: 372, cityCount: 15, topCities: ['London', 'Manchester', 'Birmingham'] },
+    { region: 'Berlin', country: 'Germany', totalSales: 12400, transactionCount: 162, cityCount: 3, topCities: ['Berlin'] },
+    { region: 'Madrid', country: 'Spain', totalSales: 9800, transactionCount: 128, cityCount: 4, topCities: ['Madrid', 'Alcobendas'] },
+  ];
   
-  // Top/Bottom SKUs
+  // Top/Bottom SKUs with all fields
   const skuBase: SKUMetrics[] = [
-    { sku: 'SKU-BEST-001', asin: 'B0ABC12345', totalSales: 45000, totalFees: 12500, feePercent: 27.8, totalRefunds: 1800, refundRate: 4.0, countries: ['USA', 'UK', 'DE'], fulfillmentModel: 'FBA', profit: 30700, profitMargin: 68.2 },
-    { sku: 'SKU-BEST-002', asin: 'B0DEF67890', totalSales: 38000, totalFees: 11200, feePercent: 29.5, totalRefunds: 1520, refundRate: 4.0, countries: ['USA', 'ES', 'FR'], fulfillmentModel: 'FBA', profit: 25280, profitMargin: 66.5 },
-    { sku: 'SKU-BEST-003', asin: 'B0GHI11111', totalSales: 32000, totalFees: 9600, feePercent: 30.0, totalRefunds: 1600, refundRate: 5.0, countries: ['USA', 'CA'], fulfillmentModel: 'FBA', profit: 20800, profitMargin: 65.0 },
-    { sku: 'SKU-MID-001', asin: 'B0JKL22222', totalSales: 18000, totalFees: 5940, feePercent: 33.0, totalRefunds: 1260, refundRate: 7.0, countries: ['USA'], fulfillmentModel: 'FBM', profit: 10800, profitMargin: 60.0 },
-    { sku: 'SKU-MID-002', asin: 'B0MNO33333', totalSales: 15000, totalFees: 5100, feePercent: 34.0, totalRefunds: 1050, refundRate: 7.0, countries: ['DE', 'FR'], fulfillmentModel: 'FBA', profit: 8850, profitMargin: 59.0 },
+    { sku: 'SKU-BEST-001', asin: 'B0ABC12345', description: 'ARCOS Premium Chef Knife 8 Inch Professional Kitchen Knife', totalSales: 45000, totalFees: 12500, feePercent: 27.8, totalRefunds: 1800, refundRate: 4.0, quantity: 892, countries: ['USA', 'UK', 'Germany'], cities: ['New York', 'Los Angeles', 'London'], fulfillmentModel: 'FBA', profit: 30700, profitMargin: 68.2 },
+    { sku: 'SKU-BEST-002', asin: 'B0DEF67890', description: 'ARCOS Paring Knife Set 3 Pieces Stainless Steel', totalSales: 38000, totalFees: 11200, feePercent: 29.5, totalRefunds: 1520, refundRate: 4.0, quantity: 756, countries: ['USA', 'Spain', 'France'], cities: ['Chicago', 'Madrid', 'Paris'], fulfillmentModel: 'FBA', profit: 25280, profitMargin: 66.5 },
+    { sku: 'SKU-BEST-003', asin: 'B0GHI11111', description: 'ARCOS Ham Holder Professional Slicing Stand', totalSales: 32000, totalFees: 9600, feePercent: 30.0, totalRefunds: 1600, refundRate: 5.0, quantity: 124, countries: ['USA', 'Canada'], cities: ['Miami', 'Toronto'], fulfillmentModel: 'FBA', profit: 20800, profitMargin: 65.0 },
+    { sku: 'SKU-MID-001', asin: 'B0JKL22222', description: 'ARCOS Vegetable Knife 5 Inch Kitchen Utility Knife', totalSales: 18000, totalFees: 5940, feePercent: 33.0, totalRefunds: 1260, refundRate: 7.0, quantity: 423, countries: ['USA'], cities: ['Los Angeles', 'Houston'], fulfillmentModel: 'FBM', profit: 10800, profitMargin: 60.0 },
+    { sku: 'SKU-MID-002', asin: 'B0MNO33333', description: 'ARCOS Cutting Board Wood Style Professional', totalSales: 15000, totalFees: 5100, feePercent: 34.0, totalRefunds: 1050, refundRate: 7.0, quantity: 312, countries: ['Germany', 'France'], cities: ['Berlin', 'Paris'], fulfillmentModel: 'FBA', profit: 8850, profitMargin: 59.0 },
   ];
   
   const worstSkus: SKUMetrics[] = [
-    { sku: 'SKU-BAD-001', asin: 'B0PQR44444', totalSales: 8000, totalFees: 3600, feePercent: 45.0, totalRefunds: 1600, refundRate: 20.0, countries: ['USA'], fulfillmentModel: 'FBA', profit: 2800, profitMargin: 35.0 },
-    { sku: 'SKU-BAD-002', asin: 'B0STU55555', totalSales: 5500, totalFees: 2530, feePercent: 46.0, totalRefunds: 880, refundRate: 16.0, countries: ['UK'], fulfillmentModel: 'FBM', profit: 2090, profitMargin: 38.0 },
-    { sku: 'SKU-BAD-003', asin: 'B0VWX66666', totalSales: 4200, totalFees: 1890, feePercent: 45.0, totalRefunds: 546, refundRate: 13.0, countries: ['DE'], fulfillmentModel: 'FBA', profit: 1764, profitMargin: 42.0 },
+    { sku: 'SKU-BAD-001', asin: 'B0PQR44444', description: 'ARCOS Budget Knife Set Economy', totalSales: 8000, totalFees: 3600, feePercent: 45.0, totalRefunds: 1600, refundRate: 20.0, quantity: 245, countries: ['USA'], cities: ['New York'], fulfillmentModel: 'FBA', profit: 2800, profitMargin: 35.0 },
+    { sku: 'SKU-BAD-002', asin: 'B0STU55555', description: 'ARCOS Kitchen Gadget Multi-Tool', totalSales: 5500, totalFees: 2530, feePercent: 46.0, totalRefunds: 880, refundRate: 16.0, quantity: 178, countries: ['UK'], cities: ['London'], fulfillmentModel: 'FBM', profit: 2090, profitMargin: 38.0 },
+    { sku: 'SKU-BAD-003', asin: 'B0VWX66666', description: 'ARCOS Cheese Knife Specialty', totalSales: 4200, totalFees: 1890, feePercent: 45.0, totalRefunds: 546, refundRate: 13.0, quantity: 89, countries: ['Germany'], cities: ['Berlin'], fulfillmentModel: 'FBA', profit: 1764, profitMargin: 42.0 },
   ];
+
+  const allSKUs = [...skuBase, ...worstSkus];
   
   // Alerts
   const alerts: DiscrepancyAlert[] = [
@@ -308,6 +347,10 @@ export const generateMockMultiAnalysis = (files: FileInfo[]): MultiAnalysisResul
 
 **Veredicto**: Negocio rentable pero con fugas evitables. Atacar los 3 SKUs problemáticos puede mejorar el margen global en +2-3 puntos.`;
 
+  // FBA vs FBM breakdown
+  const fbaData = byModel.find(m => m.model === 'FBA') || { totalSales: 0, totalFees: 0, totalRefunds: 0, transactionCount: 0 };
+  const fbmData = byModel.find(m => m.model === 'FBM') || { totalSales: 0, totalFees: 0, totalRefunds: 0, transactionCount: 0 };
+
   return {
     analyzedAt: new Date(),
     fileCount: files.length,
@@ -323,13 +366,21 @@ export const generateMockMultiAnalysis = (files: FileInfo[]): MultiAnalysisResul
       profitMargin: (netProfitUSD / totalSalesUSD) * 100,
       transactionCount: 20540,
       skuCount: 156,
-      countriesCount: countries.length
+      countriesCount: countries.length,
+      fbaVsFbm: {
+        fba: { sales: fbaData.totalSales, fees: fbaData.totalFees, refunds: fbaData.totalRefunds, transactions: fbaData.transactionCount },
+        fbm: { sales: fbmData.totalSales, fees: fbmData.totalFees, refunds: fbmData.totalRefunds, transactions: fbmData.transactionCount }
+      }
     },
     byCountry,
     byModel,
     byFeeType,
+    byTransactionType,
+    byCity,
+    byRegion,
     topSKUs: skuBase,
     bottomSKUs: worstSkus,
+    allSKUs,
     alerts,
     executiveSummary,
     recommendations: [
