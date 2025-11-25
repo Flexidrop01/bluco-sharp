@@ -12,15 +12,16 @@ import CountryBreakdown from './CountryBreakdown';
 import DemographicAnalysis from './DemographicAnalysis';
 import SKURanking from './SKURanking';
 import TransactionTypeBreakdown from './TransactionTypeBreakdown';
-import { PLDashboard, PLMetrics } from './PLDashboard';
+import { PLDashboard } from './PLDashboard';
+import { PLResult } from '@/lib/metricsToPL';
 
 interface MultiDashboardProps {
   analysis: MultiAnalysisResult;
-  plMetrics?: PLMetrics;
+  plResult?: PLResult;
   onReset: () => void;
 }
 
-const MultiDashboard = ({ analysis, plMetrics, onReset }: MultiDashboardProps) => {
+const MultiDashboard = ({ analysis, plResult, onReset }: MultiDashboardProps) => {
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat('es-ES', {
       dateStyle: 'long',
@@ -244,8 +245,13 @@ const MultiDashboard = ({ analysis, plMetrics, onReset }: MultiDashboardProps) =
         </TabsContent>
 
         <TabsContent value="pl">
-          {plMetrics ? (
-            <PLDashboard metrics={plMetrics} currency="USD" period={`${analysis.files[0]?.fileName || 'Análisis'}`} />
+          {plResult ? (
+            <PLDashboard 
+              metrics={plResult.total} 
+              currency={plResult.currency} 
+              period={`${analysis.files[0]?.fileName || 'Análisis'}`}
+              monthlyData={plResult.monthly}
+            />
           ) : (
             <Card className="glass-card">
               <CardContent className="p-8 text-center">
