@@ -13,6 +13,7 @@ import { parseCFOFile } from '@/lib/cfoParser';
 import { processMassiveFile } from '@/lib/massiveFileProcessor';
 import { convertMetricsToAnalysis } from '@/lib/metricsToAnalysis';
 import { convertMetricsToPL, PLResult } from '@/lib/metricsToPL';
+import { processCEOBrainPL, MonthlyPLTable } from '@/lib/ceoBrainPLBuilder';
 import { generateMockAnalysis } from '@/lib/mockAnalysis';
 import { generateMockIDQAnalysis } from '@/lib/mockIdqAnalysis';
 import { generateMockCFOAnalysis } from '@/lib/mockCfoAnalysis';
@@ -35,6 +36,7 @@ const Index = () => {
   const [singleAnalysis, setSingleAnalysis] = useState<AnalysisResult | null>(null);
   const [multiAnalysis, setMultiAnalysis] = useState<MultiAnalysisResult | null>(null);
   const [plResult, setPLResult] = useState<PLResult | null>(null);
+  const [ceoBrainPL, setCeoBrainPL] = useState<MonthlyPLTable | null>(null);
   const [idqAnalysis, setIdqAnalysis] = useState<IDQAnalysisResult | null>(null);
   const [cfoAnalysis, setCfoAnalysis] = useState<CFOAnalysisResult | null>(null);
 
@@ -76,6 +78,13 @@ const Index = () => {
         rowCount: metrics.totalRows,
         detectedColumns: Array.from(metrics.detectedColumns.keys())
       }));
+
+      // Process with CEO Brain P&L Builder for monthly P&L
+      console.log('[CEO Brain] Generating monthly P&L table...');
+      const ceoBrainPLTable = await processCEOBrainPL(files[0], (p) => {
+        setProgress(80 + (p * 0.2)); // Last 20% of progress
+      });
+      setCeoBrainPL(ceoBrainPLTable);
 
       if (files.length === 1) {
         // Single file - check if small enough for simple analysis
@@ -154,6 +163,7 @@ const Index = () => {
     setSingleAnalysis(null);
     setMultiAnalysis(null);
     setPLResult(null);
+    setCeoBrainPL(null);
     setError(null);
   }, []);
 
@@ -177,6 +187,7 @@ const Index = () => {
           <MultiDashboard 
             analysis={multiAnalysis} 
             plResult={plResult || undefined}
+            ceoBrainPL={ceoBrainPL || undefined}
             onReset={handleCEOReset} 
           />
         </main>
