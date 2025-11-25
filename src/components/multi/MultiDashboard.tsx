@@ -9,10 +9,10 @@ import {
   AlertTriangle, Target, Package, FileText, MapPin, Receipt, Calculator, Brain
 } from 'lucide-react';
 import GlobalSummary from './GlobalSummary';
-import CountryBreakdown from './CountryBreakdown';
-import DemographicAnalysis from './DemographicAnalysis';
+import CountryBreakdownV2 from './CountryBreakdownV2';
+import DemographicAnalysisV2 from './DemographicAnalysisV2';
 import SKURanking from './SKURanking';
-import TransactionTypeBreakdown from './TransactionTypeBreakdown';
+import TransactionBreakdownV2 from './TransactionBreakdownV2';
 import { PLDashboard } from './PLDashboard';
 import CEOBrainPLTable from './CEOBrainPLTable';
 import CEOPLDashboard from './CEOPLDashboard';
@@ -140,15 +140,42 @@ const MultiDashboard = ({ analysis, rawMetrics, plResult, ceoBrainPL, onReset }:
         </TabsList>
 
         <TabsContent value="countries">
-          <CountryBreakdown countries={analysis.byCountry} />
+          {rawMetrics ? (
+            <CountryBreakdownV2 metrics={rawMetrics} />
+          ) : (
+            <Card className="glass-card">
+              <CardContent className="p-8 text-center">
+                <Globe className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">No hay datos de países disponibles</p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="demographic">
-          <DemographicAnalysis byCity={analysis.byCity || []} byRegion={analysis.byRegion || []} />
+          {rawMetrics ? (
+            <DemographicAnalysisV2 metrics={rawMetrics} />
+          ) : (
+            <Card className="glass-card">
+              <CardContent className="p-8 text-center">
+                <MapPin className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">No hay datos demográficos disponibles</p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="transactions">
-          <TransactionTypeBreakdown byTransactionType={analysis.byTransactionType || []} fbaVsFbm={analysis.global.fbaVsFbm} />
+          {rawMetrics ? (
+            <TransactionBreakdownV2 metrics={rawMetrics} />
+          ) : (
+            <Card className="glass-card">
+              <CardContent className="p-8 text-center">
+                <Receipt className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">No hay datos de transacciones disponibles</p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="skus">
