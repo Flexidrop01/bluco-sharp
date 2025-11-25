@@ -4,51 +4,36 @@ import { EXCHANGE_RATES } from './massiveColumnMappings';
 
 /**
  * Convierte las métricas agregadas a formato MultiAnalysisResult
- * IMPORTANTE: Solo usa datos REALES del archivo, no inventa nada
+ * IMPORTANTE: Solo usa datos REALES del archivo
  */
 export const convertMetricsToAnalysis = (
   metrics: AggregatedMetrics,
   files: FileInfo[]
 ): MultiAnalysisResult => {
   
-  // Convertir marketplaces - USAR MARKETPLACE NO PAÍS
+  // Convertir marketplaces - USAR MARKETPLACE (amazon.es)
   const byCountry: CountryMetrics[] = Array.from(metrics.byCountry.values()).map(c => {
     const exchangeRate = EXCHANGE_RATES[c.currency] || 1;
     return {
-      country: c.marketplace, // Usar marketplace como identificador principal
+      country: c.marketplace,
       marketplace: c.marketplace,
       currency: c.currency,
       grossSales: c.grossSales,
       grossSalesUSD: c.grossSalesUSD,
-      shippingCredits: 0, // Solo se rellena si el archivo tiene este dato
+      shippingCredits: 0,
       giftwrapCredits: 0,
       promotionalRebates: 0,
       taxCollected: 0,
       totalRefunds: c.refunds,
-      refundCount: 0, // No inventar
+      refundCount: 0,
       refundRate: c.refundRate,
       fees: {
-        // Usar datos reales, no porcentajes inventados
-        referral: 0, // No podemos separar sin datos detallados
-        fba: 0,
-        storage: 0,
-        inboundPlacement: 0,
-        advertising: 0,
-        regulatory: 0,
-        subscription: 0,
-        removal: 0,
-        liquidation: 0,
-        other: 0,
-        total: c.fees // Solo el total es real
+        referral: 0, fba: 0, storage: 0, inboundPlacement: 0, advertising: 0,
+        regulatory: 0, subscription: 0, removal: 0, liquidation: 0, other: 0,
+        total: c.fees
       },
       feePercent: c.feePercent,
-      reimbursements: {
-        lost: 0,
-        damaged: 0,
-        customerService: 0,
-        other: 0,
-        total: c.reimbursements
-      },
+      reimbursements: { lost: 0, damaged: 0, customerService: 0, other: 0, total: c.reimbursements },
       modelBreakdown: {
         fba: { sales: 0, fees: 0, refunds: 0 },
         fbm: { sales: 0, fees: 0, refunds: 0 },
@@ -66,7 +51,7 @@ export const convertMetricsToAnalysis = (
     };
   });
 
-  // Convertir modelos de fulfillment - DATOS REALES
+  // Convertir modelos de fulfillment
   const byModel: ModelMetrics[] = Array.from(metrics.byFulfillment.values()).map(f => ({
     model: f.model as 'FBA' | 'FBM' | 'AWD' | 'SWA' | 'Unknown',
     totalSales: f.grossSales,
@@ -75,34 +60,31 @@ export const convertMetricsToAnalysis = (
     feePercent: f.grossSales > 0 ? (f.fees / f.grossSales) * 100 : 0,
     totalRefunds: f.refunds,
     refundRate: f.grossSales > 0 ? (f.refunds / f.grossSales) * 100 : 0,
-    countries: Array.from(metrics.marketplaces), // Usar marketplaces
+    countries: Array.from(metrics.marketplaces),
     transactionCount: f.transactionCount
   }));
 
-  // Convertir tipos de fee - DATOS REALES
+  // Convertir tipos de fee
   const byFeeType: FeeTypeMetrics[] = Array.from(metrics.byFeeType.entries()).map(([type, amount]) => ({
     feeType: type,
     totalAmount: amount,
     totalAmountUSD: amount,
     percentOfTotal: metrics.totalFees > 0 ? (amount / metrics.totalFees) * 100 : 0,
-    byCountry: [], // Solo si tenemos datos reales por país
+    byCountry: [],
     trend: 'stable' as const
   }));
 
-  // Convertir tipos de transacción - DATOS REALES
-  const totalTransactions = Array.from(metrics.byTransactionType.values()).reduce((a, b) => a + b, 0);
+  // Convertir tipos de transacción
+  const totalTxCount = Array.from(metrics.byTransactionType.values()).reduce((a, b) => a + b, 0);
   const byTransactionType: TransactionTypeMetrics[] = Array.from(metrics.byTransactionType.entries()).map(([type, count]) => ({
     type,
     count,
-    totalAmount: 0,
-    percentOfTotal: totalTransactions > 0 ? (count / totalTransactions) * 100 : 0,
-    fulfillmentBreakdown: {
-      fba: { count: 0, amount: 0 },
-      fbm: { count: 0, amount: 0 }
-    }
+    totalAmount: metrics.byTransactionTypeDetail.get(type)?.totalAmount || 0,
+    percentOfTotal: totalTxCount > 0 ? (count / totalTxCount) * 100 : 0,
+    fulfillmentBreakdown: { fba: { count: 0, amount: 0 }, fbm: { count: 0, amount: 0 } }
   }));
 
-  // Convertir ciudades - DATOS REALES
+  // Convertir ciudades
   const byCity: CityMetrics[] = Array.from(metrics.byCity.values()).map(c => ({
     city: c.city,
     region: c.region,
@@ -116,7 +98,7 @@ export const convertMetricsToAnalysis = (
       .map(([sku, sales]) => ({ sku, sales, description: metrics.bySKU.get(sku)?.description }))
   }));
 
-  // Convertir regiones - DATOS REALES
+  // Convertir regiones
   const byRegion: RegionMetrics[] = Array.from(metrics.byRegion.values()).map(r => ({
     region: r.region,
     country: r.country,
@@ -126,7 +108,7 @@ export const convertMetricsToAnalysis = (
     topCities: Array.from(r.cities).slice(0, 5)
   }));
 
-  // Convertir SKUs - DATOS REALES
+  // Convertir SKUs
   const skuArray = Array.from(metrics.bySKU.values());
   const sortedByProfit = [...skuArray].sort((a, b) => 
     (b.grossSales - b.fees - b.refunds) - (a.grossSales - a.fees - a.refunds)
@@ -144,36 +126,23 @@ export const convertMetricsToAnalysis = (
     quantity: s.quantity,
     countries: Array.from(s.countries),
     cities: Array.from(s.cities),
-    fulfillmentModel: 'Unknown' as const, // No inventar
+    fulfillmentModel: (s.fulfillment || 'Unknown') as 'FBA' | 'FBM' | 'AWD' | 'Unknown',
     profit: s.grossSales - s.fees - s.refunds,
     profitMargin: s.grossSales > 0 ? ((s.grossSales - s.fees - s.refunds) / s.grossSales) * 100 : 0
   });
 
-  const topSKUs: SKUMetrics[] = sortedByProfit.slice(0, 5).map(mapSKU);
-  const bottomSKUs: SKUMetrics[] = sortedByProfit.slice(-3).reverse().map(mapSKU);
-  const allSKUs: SKUMetrics[] = sortedByProfit.map(mapSKU);
+  const topSKUs = sortedByProfit.slice(0, 5).map(mapSKU);
+  const bottomSKUs = sortedByProfit.slice(-3).reverse().map(mapSKU);
+  const allSKUs = sortedByProfit.map(mapSKU);
 
-  // Generar alertas basadas en datos REALES
+  // Generar alertas
   const alerts: DiscrepancyAlert[] = [];
   
-  if (metrics.discrepancies.length > 0) {
-    const totalDiscrepancy = metrics.discrepancies.reduce((sum, d) => sum + Math.abs(d.difference), 0);
-    alerts.push({
-      type: 'calculation_error',
-      severity: totalDiscrepancy > 1000 ? 'critical' : 'warning',
-      description: `${metrics.discrepancies.length} discrepancias detectadas. Diferencia total: ${totalDiscrepancy.toFixed(2)}`,
-      expectedValue: metrics.calculatedTotal,
-      actualValue: metrics.actualTotal,
-      difference: metrics.calculatedTotal - metrics.actualTotal,
-      recommendation: 'Revisar transacciones marcadas con MISTAKE'
-    });
-  }
-
   if (metrics.feePercent > 35) {
     alerts.push({
       type: 'unusual_fee',
       severity: 'critical',
-      description: `Fee global del ${metrics.feePercent.toFixed(1)}% por encima del umbral`,
+      description: `Fee global del ${metrics.feePercent.toFixed(1)}%`,
       expectedValue: 30,
       actualValue: metrics.feePercent,
       recommendation: 'Revisar estructura de precios'
@@ -191,10 +160,7 @@ export const convertMetricsToAnalysis = (
     });
   }
 
-  // Resumen ejecutivo con DATOS REALES
-  const executiveSummary = generateExecutiveSummary(metrics, alerts);
-
-  // FBA vs FBM - DATOS REALES
+  const executiveSummary = generateExecutiveSummary(metrics);
   const fbaData = byModel.find(m => m.model === 'FBA');
   const fbmData = byModel.find(m => m.model === 'FBM');
 
@@ -215,18 +181,8 @@ export const convertMetricsToAnalysis = (
       skuCount: metrics.bySKU.size,
       countriesCount: metrics.marketplaces.size,
       fbaVsFbm: {
-        fba: { 
-          sales: fbaData?.totalSales || 0, 
-          fees: fbaData?.totalFees || 0, 
-          refunds: fbaData?.totalRefunds || 0, 
-          transactions: fbaData?.transactionCount || 0 
-        },
-        fbm: { 
-          sales: fbmData?.totalSales || 0, 
-          fees: fbmData?.totalFees || 0, 
-          refunds: fbmData?.totalRefunds || 0, 
-          transactions: fbmData?.transactionCount || 0 
-        }
+        fba: { sales: fbaData?.totalSales || 0, fees: fbaData?.totalFees || 0, refunds: fbaData?.totalRefunds || 0, transactions: fbaData?.transactionCount || 0 },
+        fbm: { sales: fbmData?.totalSales || 0, fees: fbmData?.totalFees || 0, refunds: fbmData?.totalRefunds || 0, transactions: fbmData?.transactionCount || 0 }
       }
     },
     byCountry,
@@ -240,32 +196,49 @@ export const convertMetricsToAnalysis = (
     allSKUs,
     alerts,
     executiveSummary,
-    recommendations: generateRecommendations(metrics, alerts)
+    recommendations: []
   };
 };
 
 /**
- * Genera resumen ejecutivo con SOLO datos reales del archivo
- * Usa exactamente las categorías de Amazon:
- * INGRESOS: ventas de productos, abonos de envío, envoltorio regalo, impuestos
- * GASTOS: tarifas de venta, tarifas logística amazon, otras tarifas, otro
+ * Genera resumen ejecutivo con datos reales
  */
-const generateExecutiveSummary = (
-  metrics: AggregatedMetrics,
-  alerts: DiscrepancyAlert[]
-): string => {
+const generateExecutiveSummary = (metrics: AggregatedMetrics): string => {
   const marketplaces = Array.from(metrics.marketplaces);
   const dateRangeText = metrics.dateRange.min && metrics.dateRange.max 
     ? `${metrics.dateRange.min.toLocaleDateString('es-ES')} - ${metrics.dateRange.max.toLocaleDateString('es-ES')}`
     : 'No disponible';
 
-  // Desglose por modelo de fulfillment REAL
-  const fulfillmentBreakdown = Array.from(metrics.byFulfillment.entries())
-    .filter(([, data]) => data.grossSales > 0 || data.fees > 0)
-    .map(([model, data]) => {
-      return `- **${model}**: Ventas ${data.grossSales.toLocaleString('es-ES', { maximumFractionDigits: 2 })} | Fees ${data.fees.toLocaleString('es-ES', { maximumFractionDigits: 2 })} | ${data.transactionCount.toLocaleString()} transacciones`;
+  // Desglose por tipo de transacción con categoría
+  const txTypeBreakdown = Array.from(metrics.byTransactionTypeDetail.values())
+    .sort((a, b) => b.count - a.count)
+    .map(t => {
+      const categoryLabel = t.category === 'income' ? '📈 INGRESO' : 
+                           t.category === 'expense' ? '📉 GASTO' : '🔄 OTRO';
+      return `| ${t.type} | ${categoryLabel} | ${t.count.toLocaleString()} | ${t.totalAmount.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € |`;
     })
     .join('\n');
+
+  // Desglose por fulfillment
+  const fulfillmentBreakdown = Array.from(metrics.byFulfillment.entries())
+    .filter(([, data]) => data.grossSales > 0 || data.transactionCount > 0)
+    .map(([model, data]) => 
+      `| ${model} | ${data.grossSales.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € | ${data.fees.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € | ${data.refunds.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € | ${data.transactionCount.toLocaleString()} |`
+    )
+    .join('\n');
+
+  // Desglose de fees
+  const feeBreakdown = Array.from(metrics.byFeeType.entries())
+    .filter(([, amount]) => amount > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([type, amount]) => `| ${type} | ${amount.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € |`)
+    .join('\n');
+
+  // Diferencia calculada
+  const totalIngresos = metrics.grossSales + metrics.promotionalRebates;
+  const totalGastos = metrics.totalFees;
+  const ebitdaCalculado = totalIngresos - totalGastos + metrics.totalReimbursements;
+  const diferenciaPNL = metrics.actualTotal - metrics.otherMovements - ebitdaCalculado;
 
   return `## ANÁLISIS CEO BRAIN — DATOS REALES DEL ARCHIVO
 
@@ -278,48 +251,54 @@ const generateExecutiveSummary = (
 
 ---
 
-### INGRESOS (extraídos del archivo)
+### INGRESOS (columnas de ingreso del archivo)
 
 | Concepto | Importe |
 |----------|---------|
-| Ventas de productos | ${metrics.productSales.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
-| Abonos de envío | ${metrics.shippingCredits.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
-| Abonos envoltorio regalo | ${metrics.giftwrapCredits.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
-| Impuestos retenidos | ${metrics.taxCollected.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
-| **TOTAL INGRESOS** | **${metrics.grossSales.toLocaleString('es-ES', { maximumFractionDigits: 2 })}** |
+| Ventas de productos | ${metrics.productSales.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € |
+| Impuesto de ventas de productos | ${metrics.productSalesTax.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € |
+| Abonos de envío | ${metrics.shippingCredits.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € |
+| Impuestos por abonos de envío | ${metrics.shippingCreditsTax.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € |
+| Abonos envoltorio regalo | ${metrics.giftwrapCredits.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € |
+| Impuesto retenido en el sitio web | ${metrics.taxCollected.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € |
+| Devoluciones promocionales | ${metrics.promotionalRebates.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € |
+| **TOTAL INGRESOS BRUTOS** | **${metrics.grossSales.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €** |
 
 ---
 
-### DESCUENTOS Y DEVOLUCIONES
+### GASTOS (columnas de gasto del archivo)
 
 | Concepto | Importe |
 |----------|---------|
-| Devoluciones promocionales | ${metrics.promotionalRebates.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
-| Devoluciones clientes | ${metrics.totalRefunds.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
-| **TOTAL DESCUENTOS** | **${(metrics.promotionalRebates + metrics.totalRefunds).toLocaleString('es-ES', { maximumFractionDigits: 2 })}** |
+| Tarifas de venta | ${Math.abs(metrics.sellingFees).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € |
+| Tarifas Logística Amazon | ${Math.abs(metrics.fbaFees).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € |
+| Tarifas otras transacciones | ${Math.abs(metrics.otherTransactionFees).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € |
+| Otro | ${Math.abs(metrics.otherFees).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € |
+| **TOTAL GASTOS** | **${metrics.totalFees.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €** |
 
 ---
 
-### GASTOS (tarifas Amazon)
+### DESGLOSE POR TIPO DE FEE
 
-| Concepto | Importe |
-|----------|---------|
-| Tarifas de venta | ${metrics.sellingFees.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
-| Tarifas Logística Amazon | ${metrics.fbaFees.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
-| Tarifas otras transacciones + otro | ${metrics.otherFees.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
-| Almacenamiento | ${metrics.storageFees.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
-| **TOTAL GASTOS** | **${metrics.totalFees.toLocaleString('es-ES', { maximumFractionDigits: 2 })}** |
+| Tipo | Importe |
+|------|---------|
+${feeBreakdown || '| Sin datos | - |'}
 
 ---
 
-### REEMBOLSOS DE AMAZON (si aplica)
+### TABLA DINÁMICA POR TIPO DE TRANSACCIÓN
 
-| Concepto | Importe |
-|----------|---------|
-| Inventario perdido | ${metrics.reimbursementLost.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
-| Inventario dañado | ${metrics.reimbursementDamaged.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
-| Otros reembolsos | ${metrics.reimbursementOther.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
-| **TOTAL REEMBOLSOS** | **${metrics.totalReimbursements.toLocaleString('es-ES', { maximumFractionDigits: 2 })}** |
+| Tipo | Categoría | Cantidad | Importe Total |
+|------|-----------|----------|---------------|
+${txTypeBreakdown || '| Sin datos | - | - | - |'}
+
+---
+
+### POR FULFILLMENT (FBA vs FBM)
+
+| Modelo | Ventas | Fees | Devoluciones | Transacciones |
+|--------|--------|------|--------------|---------------|
+${fulfillmentBreakdown || '| Sin datos | - | - | - | - |'}
 
 ---
 
@@ -327,69 +306,34 @@ const generateExecutiveSummary = (
 
 | Concepto | Importe |
 |----------|---------|
-| Ingresos brutos | ${metrics.grossSales.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
-| (-) Descuentos | ${(metrics.promotionalRebates + metrics.totalRefunds).toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
-| (=) Ingresos netos | ${metrics.netSales.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
-| (-) Gastos Amazon | ${metrics.totalFees.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
-| (+) Reembolsos Amazon | ${metrics.totalReimbursements.toLocaleString('es-ES', { maximumFractionDigits: 2 })} |
-| **(=) EBITDA** | **${metrics.ebitda.toLocaleString('es-ES', { maximumFractionDigits: 2 })}** |
+| Ingresos brutos | ${metrics.grossSales.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € |
+| (+) Devoluciones promocionales | ${metrics.promotionalRebates.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € |
+| (-) Devoluciones clientes | ${metrics.totalRefunds.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € |
+| (=) Ingresos netos | ${metrics.netSales.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € |
+| (-) Gastos Amazon | ${metrics.totalFees.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € |
+| (+) Reembolsos Amazon | ${metrics.totalReimbursements.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € |
+| **(=) EBITDA** | **${metrics.ebitda.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €** |
 
 ${metrics.ebitda >= 0 ? '✅ Resultado positivo' : '🔴 Resultado negativo'}
 
 ---
 
-### POR FULFILLMENT
-${fulfillmentBreakdown || 'Sin datos de fulfillment detectados'}
+### OTROS MOVIMIENTOS (NO son ingresos ni gastos)
+
+| Concepto | Importe |
+|----------|---------|
+| Transferencias y otros | ${metrics.otherMovements.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € |
 
 ---
 
-### ALERTAS
-${alerts.length > 0 
-  ? alerts.map(a => `- **${a.severity.toUpperCase()}**: ${a.description}`).join('\n')
-  : '✅ Sin alertas'
-}`;
-};
+### VERIFICACIÓN
 
-/**
- * Genera recomendaciones basadas en datos REALES
- */
-const generateRecommendations = (
-  metrics: AggregatedMetrics,
-  alerts: DiscrepancyAlert[]
-): MultiAnalysisResult['recommendations'] => {
-  const recommendations: MultiAnalysisResult['recommendations'] = [];
+| Concepto | Importe |
+|----------|---------|
+| Total según archivo | ${metrics.actualTotal.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € |
+| EBITDA calculado | ${metrics.ebitda.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € |
+| Otros movimientos | ${metrics.otherMovements.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € |
+| **Diferencia** | **${diferenciaPNL.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €** |
 
-  if (metrics.feePercent > 32) {
-    recommendations.push({
-      priority: 'high',
-      action: `Revisar estructura de fees - actualmente ${metrics.feePercent.toFixed(1)}%`,
-      impact: `Fees totales: ${metrics.totalFees.toLocaleString('es-ES', { maximumFractionDigits: 2 })}`
-    });
-  }
-
-  if (metrics.refundRate > 6) {
-    recommendations.push({
-      priority: 'critical',
-      action: `Investigar devoluciones - tasa actual ${metrics.refundRate.toFixed(1)}%`,
-      impact: `Total devoluciones: ${metrics.totalRefunds.toLocaleString('es-ES', { maximumFractionDigits: 2 })}`
-    });
-  }
-
-  if (metrics.discrepancies.length > 0) {
-    recommendations.push({
-      priority: 'critical',
-      action: `Revisar ${metrics.discrepancies.length} discrepancias en liquidaciones`,
-      impact: `Diferencia: ${Math.abs(metrics.calculatedTotal - metrics.actualTotal).toFixed(2)}`
-    });
-  }
-
-  if (metrics.totalReimbursements > 0) {
-    recommendations.push({
-      priority: 'medium',
-      action: 'Seguimiento de reembolsos de inventario',
-      impact: `${metrics.totalReimbursements.toLocaleString('es-ES', { maximumFractionDigits: 2 })} recuperados`
-    });
-  }
-
-  return recommendations;
+${Math.abs(diferenciaPNL) < 1 ? '✅ Cuadra perfectamente' : '⚠️ Hay tipos de transacción sin clasificar'}`;
 };
