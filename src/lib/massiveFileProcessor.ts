@@ -6,10 +6,8 @@ import {
   shouldSkipRow,
   isHeaderRow,
   findStandardColumn,
-  detectMarketplace,
   parseNumericValue,
-  parseDateValue,
-  classifyTransactionType
+  parseDateValue
 } from './massiveColumnMappings';
 
 // Chunk size for processing large files
@@ -22,20 +20,25 @@ export interface AggregatedMetrics {
   validTransactions: number;
   skippedRows: number;
   
-  // Revenue
+  // Revenue - EXACT COLUMNS FROM AMAZON
   grossSales: number;
   grossSalesUSD: number;
-  productSales: number;
-  shippingCredits: number;
-  giftwrapCredits: number;
-  promotionalRebates: number;
-  taxCollected: number;
+  productSales: number;              // ventas de productos
+  productSalesTax: number;           // impuesto de ventas de productos
+  shippingCredits: number;           // abonos de envío
+  shippingCreditsTax: number;        // impuestos por abonos de envío
+  giftwrapCredits: number;           // abonos de envoltorio para regalo
+  giftwrapCreditsTax: number;        // impuestos por abonos de envoltorio para regalo
+  promotionalRebates: number;        // devoluciones promocionales
+  promotionalRebatesTax: number;     // impuestos de descuentos por promociones
+  taxCollected: number;              // impuesto retenido en el sitio web
   
-  // Fees
+  // Fees - EXACT COLUMNS FROM AMAZON (already negative)
   totalFees: number;
-  sellingFees: number;
-  fbaFees: number;
-  otherFees: number;
+  sellingFees: number;               // tarifas de venta
+  fbaFees: number;                   // tarifas de Logística de Amazon
+  otherTransactionFees: number;      // tarifas de otras transacciones
+  otherFees: number;                 // otro
   storageFees: number;
   inboundFees: number;
   regulatoryFees: number;
@@ -56,7 +59,7 @@ export interface AggregatedMetrics {
   feePercent: number;
   refundRate: number;
   
-  // Breakdowns
+  // Breakdowns - USE MARKETPLACE AS KEY, NOT COUNTRY
   byCountry: Map<string, CountryAggregates>;
   byMonth: Map<string, MonthAggregates>;
   bySKU: Map<string, SKUAggregates>;
@@ -64,7 +67,7 @@ export interface AggregatedMetrics {
   byFulfillment: Map<string, FulfillmentAggregates>;
   byCity: Map<string, CityAggregates>;
   byRegion: Map<string, RegionAggregates>;
-  byTransactionType: Map<string, number>;
+  byTransactionType: Map<string, TransactionTypeAggregates>;
   
   // Errors
   calculatedTotal: number;
@@ -118,6 +121,7 @@ export interface SKUAggregates {
   transactionCount: number;
   countries: Set<string>;
   cities: Set<string>;
+  fulfillment: string;
 }
 
 export interface FulfillmentAggregates {
@@ -126,6 +130,15 @@ export interface FulfillmentAggregates {
   fees: number;
   refunds: number;
   transactionCount: number;
+}
+
+export interface TransactionTypeAggregates {
+  type: string;
+  count: number;
+  totalIncome: number;
+  totalExpenses: number;
+  totalNet: number;
+  descriptions: Map<string, { count: number; amount: number }>;
 }
 
 export interface CityAggregates {
@@ -162,13 +175,18 @@ const createEmptyMetrics = (): AggregatedMetrics => ({
   grossSales: 0,
   grossSalesUSD: 0,
   productSales: 0,
+  productSalesTax: 0,
   shippingCredits: 0,
+  shippingCreditsTax: 0,
   giftwrapCredits: 0,
+  giftwrapCreditsTax: 0,
   promotionalRebates: 0,
+  promotionalRebatesTax: 0,
   taxCollected: 0,
   totalFees: 0,
   sellingFees: 0,
   fbaFees: 0,
+  otherTransactionFees: 0,
   otherFees: 0,
   storageFees: 0,
   inboundFees: 0,
@@ -203,24 +221,46 @@ const createEmptyMetrics = (): AggregatedMetrics => ({
   uniqueSKUs: new Set()
 });
 
-// Detect fulfillment model from Spanish or English values
+// Detect fulfillment model from Spanish values: "Vendedor" = FBM, "Amazon" = FBA
 const detectFulfillmentModel = (value: string): string => {
   const normalized = value.toLowerCase().trim();
   
-  // Spanish detection
-  if (normalized === 'amazon' || normalized.includes('logística de amazon') || normalized.includes('fba')) {
+  // EXACT Spanish values from Amazon file
+  if (normalized === 'amazon' || normalized === 'amazon.es') {
     return 'FBA';
   }
-  if (normalized === 'vendedor' || normalized.includes('merchant') || normalized.includes('fbm') || normalized.includes('mfn')) {
+  if (normalized === 'vendedor') {
     return 'FBM';
   }
-  if (normalized.includes('awd') || normalized.includes('warehouse')) {
-    return 'AWD';
+  
+  // Fallback patterns
+  if (normalized.includes('amazon') || normalized.includes('fba') || normalized.includes('logística')) {
+    return 'FBA';
+  }
+  if (normalized.includes('vendedor') || normalized.includes('merchant') || normalized.includes('fbm') || normalized.includes('mfn')) {
+    return 'FBM';
   }
   
-  // Default based on content
-  if (normalized.includes('amazon')) return 'FBA';
-  return 'FBM';
+  return 'Unknown';
+};
+
+// Detect marketplace from "web de Amazon" column - RETURN THE EXACT VALUE
+const detectMarketplaceExact = (value: string): string => {
+  const normalized = value.toLowerCase().trim();
+  
+  // Direct domain matching
+  for (const domain of Object.keys(MARKETPLACE_COUNTRY_MAP)) {
+    if (normalized === domain || normalized.includes(domain)) {
+      return domain;
+    }
+  }
+  
+  // If it looks like amazon.XX, return it
+  if (normalized.startsWith('amazon.')) {
+    return normalized;
+  }
+  
+  return normalized || 'unknown';
 };
 
 // Process a single row and update metrics
@@ -255,110 +295,102 @@ const processRow = (
     return val ? String(val).trim() : '';
   };
   
-  // Extract marketplace from "web de Amazon" column
+  // === EXTRACT EXACT VALUES FROM FILE ===
+  
+  // Marketplace - USE THE EXACT VALUE (amazon.es, not Spain)
   const marketplaceRaw = getString('marketplace');
-  const marketplace = detectMarketplace(marketplaceRaw);
-  const marketplaceInfo = MARKETPLACE_COUNTRY_MAP[marketplace] || MARKETPLACE_COUNTRY_MAP['amazon.com'];
-  const currency = getString('currency') || marketplaceInfo.currency;
+  const marketplace = detectMarketplaceExact(marketplaceRaw);
+  const marketplaceInfo = MARKETPLACE_COUNTRY_MAP[marketplace] || { currency: 'EUR', country: marketplace };
+  const currency = marketplaceInfo.currency;
   const exchangeRate = EXCHANGE_RATES[currency] || 1;
+  
+  // Fulfillment - "gestión logística": Vendedor = FBM, Amazon = FBA
+  const fulfillmentRaw = getString('fulfillment');
+  const fulfillmentModel = detectFulfillmentModel(fulfillmentRaw);
+  
+  // Transaction type - "tipo": Pedido, Reembolso, Tarifa, etc.
+  const transactionType = getString('type') || 'Unknown';
+  
+  // Description - used to categorize non-order fees
+  const description = getString('description');
   
   // Extract key fields
   const date = parseDateValue(getValue('date'));
   const sku = getString('sku');
-  const description = getString('description');
-  const quantity = Math.max(1, getNumeric('quantity'));
-  const transactionType = classifyTransactionType(getString('type'));
-  
-  // Fulfillment - detect from Spanish values
-  const fulfillmentRaw = getString('fulfillment');
-  const fulfillmentModel = detectFulfillmentModel(fulfillmentRaw);
+  const quantity = Math.max(0, getNumeric('quantity'));
   
   // Demographic data
   const city = getString('city');
   const region = getString('region');
   const postalCode = getString('postalCode');
   
-  // Revenue
+  // === INCOME COLUMNS (positive values) ===
   const productSales = getNumeric('productSales');
+  const productSalesTax = getNumeric('productSalesTax');
   const shippingCredits = getNumeric('shippingCredits');
+  const shippingCreditsTax = getNumeric('shippingCreditsTax');
   const giftwrapCredits = getNumeric('giftwrapCredits');
-  const promotionalRebates = Math.abs(getNumeric('promotionalRebates'));
-  const taxCollected = getNumeric('marketplaceWithheldTax') + getNumeric('productSalesTax');
+  const giftwrapCreditsTax = getNumeric('giftwrapCreditsTax');
+  const promotionalRebates = getNumeric('promotionalRebates'); // Usually negative
+  const promotionalRebatesTax = getNumeric('promotionalRebatesTax');
+  const marketplaceWithheldTax = getNumeric('marketplaceWithheldTax');
   
-  const rowGrossSales = productSales + shippingCredits + giftwrapCredits;
+  // Total income = sum of all income columns
+  const rowIncome = productSales + productSalesTax + shippingCredits + shippingCreditsTax + 
+                    giftwrapCredits + giftwrapCreditsTax + promotionalRebates + 
+                    promotionalRebatesTax + marketplaceWithheldTax;
   
-  // Fees (Spanish column names are already mapped)
-  const sellingFees = Math.abs(getNumeric('sellingFees'));
-  const fbaFees = Math.abs(getNumeric('fbaFees'));
-  const otherFees = Math.abs(getNumeric('otherTransactionFees')) + Math.abs(getNumeric('other'));
-  const storageFees = Math.abs(getNumeric('storageFee'));
-  const inboundFees = Math.abs(getNumeric('fbaInboundPlacementFee'));
-  const regulatoryFees = Math.abs(getNumeric('regulatoryFee'));
-  const advertisingFees = Math.abs(getNumeric('advertisingFee'));
+  // === EXPENSE COLUMNS (already negative in file) ===
+  const sellingFees = getNumeric('sellingFees');        // Negative
+  const fbaFees = getNumeric('fbaFees');                // Negative
+  const otherTransactionFees = getNumeric('otherTransactionFees'); // Negative
+  const otherFees = getNumeric('other');                // Negative
   
-  const rowTotalFees = sellingFees + fbaFees + otherFees + storageFees + inboundFees + regulatoryFees + advertisingFees;
-  
-  // Refunds & Reimbursements
-  const isRefund = transactionType === 'Refund' || productSales < 0;
-  const refund = isRefund ? Math.abs(productSales) : 0;
-  const reimbursementLost = getNumeric('reimbursementLost');
-  const reimbursementDamaged = getNumeric('reimbursementDamaged');
-  const reimbursementTotal = getNumeric('reimbursementTotal');
-  const reimbursementOther = Math.max(0, reimbursementTotal - reimbursementLost - reimbursementDamaged);
-  const rowReimbursements = reimbursementLost + reimbursementDamaged + reimbursementOther;
+  // Total expenses = sum of all expense columns (negative sum)
+  const rowExpenses = sellingFees + fbaFees + otherTransactionFees + otherFees;
   
   // Total from file
   const rowTotal = getNumeric('total');
   
-  // Update global metrics
-  if (!isRefund) {
-    metrics.grossSales += rowGrossSales;
-    metrics.grossSalesUSD += rowGrossSales * exchangeRate;
-    metrics.productSales += productSales;
-    metrics.shippingCredits += shippingCredits;
-    metrics.giftwrapCredits += giftwrapCredits;
-  }
-  metrics.promotionalRebates += promotionalRebates;
-  metrics.taxCollected += taxCollected;
+  // === UPDATE GLOBAL METRICS ===
   
-  metrics.totalFees += rowTotalFees;
+  // Income (only positive values)
+  if (productSales > 0) metrics.productSales += productSales;
+  if (productSalesTax > 0) metrics.productSalesTax += productSalesTax;
+  if (shippingCredits > 0) metrics.shippingCredits += shippingCredits;
+  if (shippingCreditsTax > 0) metrics.shippingCreditsTax += shippingCreditsTax;
+  if (giftwrapCredits > 0) metrics.giftwrapCredits += giftwrapCredits;
+  if (giftwrapCreditsTax > 0) metrics.giftwrapCreditsTax += giftwrapCreditsTax;
+  if (marketplaceWithheldTax > 0) metrics.taxCollected += marketplaceWithheldTax;
+  
+  // Promotional rebates (usually negative = discount)
+  metrics.promotionalRebates += promotionalRebates;
+  metrics.promotionalRebatesTax += promotionalRebatesTax;
+  
+  // Expenses (keep negative values)
   metrics.sellingFees += sellingFees;
   metrics.fbaFees += fbaFees;
+  metrics.otherTransactionFees += otherTransactionFees;
   metrics.otherFees += otherFees;
-  metrics.storageFees += storageFees;
-  metrics.inboundFees += inboundFees;
-  metrics.regulatoryFees += regulatoryFees;
-  metrics.advertisingFees += advertisingFees;
   
-  if (refund > 0) {
-    metrics.totalRefunds += refund;
+  // Check if this is a refund row (type = Reembolso or negative product sales)
+  const isRefund = transactionType.toLowerCase().includes('reembolso') || 
+                   transactionType.toLowerCase().includes('refund');
+  
+  if (isRefund) {
     metrics.refundCount++;
+    // Refunds have negative product sales, take absolute value
+    metrics.totalRefunds += Math.abs(productSales);
   }
   
-  metrics.totalReimbursements += rowReimbursements;
-  metrics.reimbursementLost += reimbursementLost;
-  metrics.reimbursementDamaged += reimbursementDamaged;
-  metrics.reimbursementOther += reimbursementOther;
-  
-  // Track calculated vs actual
-  const rowCalculated = rowGrossSales - promotionalRebates - rowTotalFees - refund + rowReimbursements;
-  metrics.calculatedTotal += rowCalculated;
+  // Track total
   metrics.actualTotal += rowTotal;
   
-  // Check for discrepancies
-  if (Math.abs(rowCalculated - rowTotal) > 1 && rowTotal !== 0) {
-    metrics.discrepancies.push({
-      row: rowIndex,
-      calculated: rowCalculated,
-      actual: rowTotal,
-      difference: rowCalculated - rowTotal,
-      description: `Row ${rowIndex}: Expected ${rowCalculated.toFixed(2)}, got ${rowTotal.toFixed(2)}`
-    });
-  }
-  
-  // Update metadata
+  // === UPDATE METADATA ===
   metrics.currencies.add(currency);
-  metrics.marketplaces.add(marketplace);
+  if (marketplace && marketplace !== 'unknown') {
+    metrics.marketplaces.add(marketplace);
+  }
   if (sku) metrics.uniqueSKUs.add(sku);
   
   if (date) {
@@ -366,43 +398,68 @@ const processRow = (
     if (!metrics.dateRange.max || date > metrics.dateRange.max) metrics.dateRange.max = date;
   }
   
-  // Track transaction types
-  metrics.byTransactionType.set(transactionType, (metrics.byTransactionType.get(transactionType) || 0) + 1);
-  
-  // Update country breakdown
-  const country = marketplaceInfo.country;
-  if (!metrics.byCountry.has(country)) {
-    metrics.byCountry.set(country, {
-      country,
-      marketplace,
-      currency,
-      grossSales: 0,
-      grossSalesUSD: 0,
-      fees: 0,
-      feePercent: 0,
-      refunds: 0,
-      refundRate: 0,
-      reimbursements: 0,
-      netSales: 0,
-      ebitda: 0,
-      transactionCount: 0,
-      topCities: new Map()
+  // === UPDATE TRANSACTION TYPE BREAKDOWN (PIVOT TABLE) ===
+  if (!metrics.byTransactionType.has(transactionType)) {
+    metrics.byTransactionType.set(transactionType, {
+      type: transactionType,
+      count: 0,
+      totalIncome: 0,
+      totalExpenses: 0,
+      totalNet: 0,
+      descriptions: new Map()
     });
   }
-  const countryData = metrics.byCountry.get(country)!;
-  if (!isRefund) {
-    countryData.grossSales += rowGrossSales;
-    countryData.grossSalesUSD += rowGrossSales * exchangeRate;
-  }
-  countryData.fees += rowTotalFees;
-  countryData.refunds += refund;
-  countryData.reimbursements += rowReimbursements;
-  countryData.transactionCount++;
-  if (city) {
-    countryData.topCities.set(city, (countryData.topCities.get(city) || 0) + rowGrossSales);
+  const txTypeData = metrics.byTransactionType.get(transactionType)!;
+  txTypeData.count++;
+  txTypeData.totalIncome += Math.max(0, rowIncome);
+  txTypeData.totalExpenses += Math.min(0, rowExpenses);
+  txTypeData.totalNet += rowTotal;
+  
+  // Track descriptions within transaction type (for fees categorization)
+  if (description && !transactionType.toLowerCase().includes('pedido')) {
+    const descKey = description.substring(0, 50); // Truncate long descriptions
+    if (!txTypeData.descriptions.has(descKey)) {
+      txTypeData.descriptions.set(descKey, { count: 0, amount: 0 });
+    }
+    const descData = txTypeData.descriptions.get(descKey)!;
+    descData.count++;
+    descData.amount += rowTotal;
   }
   
-  // Update month breakdown
+  // === UPDATE MARKETPLACE BREAKDOWN (use marketplace as key, NOT country) ===
+  if (marketplace && marketplace !== 'unknown') {
+    if (!metrics.byCountry.has(marketplace)) {
+      metrics.byCountry.set(marketplace, {
+        country: marketplaceInfo.country || marketplace,
+        marketplace: marketplace,
+        currency: currency,
+        grossSales: 0,
+        grossSalesUSD: 0,
+        fees: 0,
+        feePercent: 0,
+        refunds: 0,
+        refundRate: 0,
+        reimbursements: 0,
+        netSales: 0,
+        ebitda: 0,
+        transactionCount: 0,
+        topCities: new Map()
+      });
+    }
+    const marketplaceData = metrics.byCountry.get(marketplace)!;
+    if (!isRefund && productSales > 0) {
+      marketplaceData.grossSales += productSales;
+      marketplaceData.grossSalesUSD += productSales * exchangeRate;
+    }
+    marketplaceData.fees += rowExpenses; // Already negative
+    if (isRefund) marketplaceData.refunds += Math.abs(productSales);
+    marketplaceData.transactionCount++;
+    if (city) {
+      marketplaceData.topCities.set(city, (marketplaceData.topCities.get(city) || 0) + Math.max(0, productSales));
+    }
+  }
+  
+  // === UPDATE MONTH BREAKDOWN ===
   if (date) {
     const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
     if (!metrics.byMonth.has(monthKey)) {
@@ -416,13 +473,13 @@ const processRow = (
       });
     }
     const monthData = metrics.byMonth.get(monthKey)!;
-    if (!isRefund) monthData.grossSales += rowGrossSales;
-    monthData.fees += rowTotalFees;
-    monthData.refunds += refund;
+    if (!isRefund && productSales > 0) monthData.grossSales += productSales;
+    monthData.fees += rowExpenses;
+    if (isRefund) monthData.refunds += Math.abs(productSales);
     monthData.transactionCount++;
   }
   
-  // Update SKU breakdown
+  // === UPDATE SKU BREAKDOWN ===
   if (sku) {
     if (!metrics.bySKU.has(sku)) {
       metrics.bySKU.set(sku, {
@@ -437,121 +494,162 @@ const processRow = (
         quantity: 0,
         transactionCount: 0,
         countries: new Set(),
-        cities: new Set()
+        cities: new Set(),
+        fulfillment: fulfillmentModel
       });
     }
     const skuData = metrics.bySKU.get(sku)!;
-    if (!isRefund) {
-      skuData.grossSales += rowGrossSales;
+    if (!isRefund && productSales > 0) {
+      skuData.grossSales += productSales;
       skuData.quantity += quantity;
     }
-    skuData.fees += rowTotalFees;
-    skuData.refunds += refund;
+    skuData.fees += rowExpenses;
+    if (isRefund) skuData.refunds += Math.abs(productSales);
     skuData.transactionCount++;
-    skuData.countries.add(country);
+    if (marketplace) skuData.countries.add(marketplace);
     if (city) skuData.cities.add(city);
     // Update description if we get a better one
     if (description && description.length > skuData.description.length) {
       skuData.description = description;
     }
+    // Update fulfillment if we get a valid one
+    if (fulfillmentModel !== 'Unknown') {
+      skuData.fulfillment = fulfillmentModel;
+    }
   }
   
-  // Update fulfillment breakdown
-  if (!metrics.byFulfillment.has(fulfillmentModel)) {
-    metrics.byFulfillment.set(fulfillmentModel, {
-      model: fulfillmentModel,
-      grossSales: 0,
-      fees: 0,
-      refunds: 0,
-      transactionCount: 0
-    });
+  // === UPDATE FULFILLMENT BREAKDOWN ===
+  if (fulfillmentModel && fulfillmentModel !== 'Unknown') {
+    if (!metrics.byFulfillment.has(fulfillmentModel)) {
+      metrics.byFulfillment.set(fulfillmentModel, {
+        model: fulfillmentModel,
+        grossSales: 0,
+        fees: 0,
+        refunds: 0,
+        transactionCount: 0
+      });
+    }
+    const fulfillmentData = metrics.byFulfillment.get(fulfillmentModel)!;
+    if (!isRefund && productSales > 0) fulfillmentData.grossSales += productSales;
+    fulfillmentData.fees += rowExpenses;
+    if (isRefund) fulfillmentData.refunds += Math.abs(productSales);
+    fulfillmentData.transactionCount++;
   }
-  const fulfillmentData = metrics.byFulfillment.get(fulfillmentModel)!;
-  if (!isRefund) fulfillmentData.grossSales += rowGrossSales;
-  fulfillmentData.fees += rowTotalFees;
-  fulfillmentData.refunds += refund;
-  fulfillmentData.transactionCount++;
   
-  // Update city breakdown (demographic data)
+  // === UPDATE CITY BREAKDOWN ===
   if (city) {
-    const cityKey = `${city}|${region}|${country}`;
+    const cityKey = `${city}|${region}|${marketplace}`;
     if (!metrics.byCity.has(cityKey)) {
       metrics.byCity.set(cityKey, {
         city,
         region: region || '',
         postalCode: postalCode || '',
-        country,
+        country: marketplace,
         grossSales: 0,
         transactionCount: 0,
         topSKUs: new Map()
       });
     }
     const cityData = metrics.byCity.get(cityKey)!;
-    if (!isRefund) cityData.grossSales += rowGrossSales;
+    if (!isRefund && productSales > 0) cityData.grossSales += productSales;
     cityData.transactionCount++;
     if (sku) {
-      cityData.topSKUs.set(sku, (cityData.topSKUs.get(sku) || 0) + rowGrossSales);
+      cityData.topSKUs.set(sku, (cityData.topSKUs.get(sku) || 0) + Math.max(0, productSales));
     }
   }
   
-  // Update region breakdown
+  // === UPDATE REGION BREAKDOWN ===
   if (region) {
-    const regionKey = `${region}|${country}`;
+    const regionKey = `${region}|${marketplace}`;
     if (!metrics.byRegion.has(regionKey)) {
       metrics.byRegion.set(regionKey, {
         region,
-        country,
+        country: marketplace,
         grossSales: 0,
         transactionCount: 0,
         cities: new Set()
       });
     }
     const regionData = metrics.byRegion.get(regionKey)!;
-    if (!isRefund) regionData.grossSales += rowGrossSales;
+    if (!isRefund && productSales > 0) regionData.grossSales += productSales;
     regionData.transactionCount++;
     if (city) regionData.cities.add(city);
   }
   
-  // Update fee type breakdown
-  if (sellingFees > 0) metrics.byFeeType.set('Referral', (metrics.byFeeType.get('Referral') || 0) + sellingFees);
-  if (fbaFees > 0) metrics.byFeeType.set('FBA', (metrics.byFeeType.get('FBA') || 0) + fbaFees);
-  if (storageFees > 0) metrics.byFeeType.set('Storage', (metrics.byFeeType.get('Storage') || 0) + storageFees);
-  if (inboundFees > 0) metrics.byFeeType.set('Inbound', (metrics.byFeeType.get('Inbound') || 0) + inboundFees);
-  if (regulatoryFees > 0) metrics.byFeeType.set('Regulatory', (metrics.byFeeType.get('Regulatory') || 0) + regulatoryFees);
-  if (advertisingFees > 0) metrics.byFeeType.set('Advertising', (metrics.byFeeType.get('Advertising') || 0) + advertisingFees);
-  if (otherFees > 0) metrics.byFeeType.set('Other', (metrics.byFeeType.get('Other') || 0) + otherFees);
+  // === UPDATE FEE TYPE BREAKDOWN ===
+  if (sellingFees < 0) metrics.byFeeType.set('Tarifas de venta', (metrics.byFeeType.get('Tarifas de venta') || 0) + Math.abs(sellingFees));
+  if (fbaFees < 0) metrics.byFeeType.set('Logística de Amazon', (metrics.byFeeType.get('Logística de Amazon') || 0) + Math.abs(fbaFees));
+  if (otherTransactionFees < 0) metrics.byFeeType.set('Otras transacciones', (metrics.byFeeType.get('Otras transacciones') || 0) + Math.abs(otherTransactionFees));
+  if (otherFees < 0) metrics.byFeeType.set('Otro', (metrics.byFeeType.get('Otro') || 0) + Math.abs(otherFees));
 };
 
 // Finalize metrics after all rows processed
 const finalizeMetrics = (metrics: AggregatedMetrics): void => {
-  // Calculate net sales and EBITDA
-  metrics.netSales = metrics.grossSales - metrics.promotionalRebates - metrics.totalRefunds;
-  const avgExchangeRate = metrics.grossSales > 0 ? metrics.grossSalesUSD / metrics.grossSales : 1;
-  metrics.netSalesUSD = metrics.netSales * avgExchangeRate;
+  // Calculate gross sales (sum of all positive income)
+  metrics.grossSales = metrics.productSales + metrics.productSalesTax + 
+                       metrics.shippingCredits + metrics.shippingCreditsTax +
+                       metrics.giftwrapCredits + metrics.giftwrapCreditsTax +
+                       metrics.taxCollected;
+  
+  // Total fees (sum of negative expenses, as absolute value)
+  metrics.totalFees = Math.abs(metrics.sellingFees + metrics.fbaFees + 
+                               metrics.otherTransactionFees + metrics.otherFees);
+  
+  // Net sales (gross - promotional rebates - refunds)
+  metrics.netSales = metrics.grossSales + metrics.promotionalRebates - metrics.totalRefunds;
+  
+  // EBITDA
   metrics.ebitda = metrics.netSales - metrics.totalFees + metrics.totalReimbursements;
+  
+  // Calculate USD values
+  const avgExchangeRate = EXCHANGE_RATES['EUR'] || 1;
+  metrics.grossSalesUSD = metrics.grossSales * avgExchangeRate;
+  metrics.netSalesUSD = metrics.netSales * avgExchangeRate;
   
   // Calculate percentages
   metrics.feePercent = metrics.netSales > 0 ? (metrics.totalFees / metrics.netSales) * 100 : 0;
   metrics.refundRate = metrics.grossSales > 0 ? (metrics.totalRefunds / metrics.grossSales) * 100 : 0;
   
-  // Finalize country metrics
-  for (const [, countryData] of metrics.byCountry) {
-    countryData.netSales = countryData.grossSales - countryData.refunds;
-    countryData.ebitda = countryData.netSales - countryData.fees + countryData.reimbursements;
-    countryData.feePercent = countryData.netSales > 0 ? (countryData.fees / countryData.netSales) * 100 : 0;
-    countryData.refundRate = countryData.grossSales > 0 ? (countryData.refunds / countryData.grossSales) * 100 : 0;
+  // Calculated total for discrepancy check
+  metrics.calculatedTotal = metrics.grossSales + metrics.promotionalRebates - 
+                            metrics.totalFees + metrics.totalReimbursements;
+  
+  // Finalize marketplace metrics
+  for (const [, marketplaceData] of metrics.byCountry) {
+    marketplaceData.netSales = marketplaceData.grossSales - marketplaceData.refunds;
+    marketplaceData.fees = Math.abs(marketplaceData.fees);
+    marketplaceData.ebitda = marketplaceData.netSales - marketplaceData.fees + marketplaceData.reimbursements;
+    marketplaceData.feePercent = marketplaceData.netSales > 0 ? (marketplaceData.fees / marketplaceData.netSales) * 100 : 0;
+    marketplaceData.refundRate = marketplaceData.grossSales > 0 ? (marketplaceData.refunds / marketplaceData.grossSales) * 100 : 0;
   }
   
   // Finalize month metrics
   for (const [, monthData] of metrics.byMonth) {
-    monthData.netSales = monthData.grossSales - monthData.refunds;
+    monthData.fees = Math.abs(monthData.fees);
+    monthData.netSales = monthData.grossSales - monthData.refunds - monthData.fees;
   }
   
   // Finalize SKU metrics
   for (const [, skuData] of metrics.bySKU) {
+    skuData.fees = Math.abs(skuData.fees);
     skuData.feePercent = skuData.grossSales > 0 ? (skuData.fees / skuData.grossSales) * 100 : 0;
     skuData.refundRate = skuData.grossSales > 0 ? (skuData.refunds / skuData.grossSales) * 100 : 0;
   }
+  
+  // Finalize fulfillment metrics
+  for (const [, fulfillmentData] of metrics.byFulfillment) {
+    fulfillmentData.fees = Math.abs(fulfillmentData.fees);
+  }
+  
+  console.log('[CEO Brain] Final metrics:', {
+    grossSales: metrics.grossSales.toFixed(2),
+    totalFees: metrics.totalFees.toFixed(2),
+    netSales: metrics.netSales.toFixed(2),
+    ebitda: metrics.ebitda.toFixed(2),
+    actualTotal: metrics.actualTotal.toFixed(2),
+    marketplaces: Array.from(metrics.marketplaces),
+    transactionTypes: Array.from(metrics.byTransactionType.keys())
+  });
 };
 
 // Build column map from headers
@@ -625,7 +723,7 @@ export const processMassiveCSV = async (
           validTransactions: metrics.validTransactions,
           skippedRows: metrics.skippedRows,
           uniqueSKUs: metrics.uniqueSKUs.size,
-          countries: Array.from(metrics.marketplaces),
+          marketplaces: Array.from(metrics.marketplaces),
           cities: metrics.byCity.size
         });
         resolve(metrics);
