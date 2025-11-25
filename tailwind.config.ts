@@ -42,6 +42,14 @@ export default {
           DEFAULT: "hsl(var(--warning))",
           foreground: "hsl(var(--warning-foreground))",
         },
+        idq: {
+          DEFAULT: "hsl(var(--idq))",
+          foreground: "hsl(var(--idq-foreground))",
+        },
+        "amazon-orange": "hsl(var(--amazon-orange))",
+        "status-critical": "hsl(var(--status-critical))",
+        "status-warning": "hsl(var(--status-warning))",
+        "status-success": "hsl(var(--status-success))",
         muted: {
           DEFAULT: "hsl(var(--muted))",
           foreground: "hsl(var(--muted-foreground))",
