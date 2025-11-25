@@ -12,6 +12,7 @@ import { parseIDQFile } from '@/lib/idqParser';
 import { parseCFOFile } from '@/lib/cfoParser';
 import { processMassiveFile } from '@/lib/massiveFileProcessor';
 import { convertMetricsToAnalysis } from '@/lib/metricsToAnalysis';
+import { convertMetricsToPL, PLResult } from '@/lib/metricsToPL';
 import { generateMockAnalysis } from '@/lib/mockAnalysis';
 import { generateMockIDQAnalysis } from '@/lib/mockIdqAnalysis';
 import { generateMockCFOAnalysis } from '@/lib/mockCfoAnalysis';
@@ -33,6 +34,7 @@ const Index = () => {
   const [rowsProcessed, setRowsProcessed] = useState(0);
   const [singleAnalysis, setSingleAnalysis] = useState<AnalysisResult | null>(null);
   const [multiAnalysis, setMultiAnalysis] = useState<MultiAnalysisResult | null>(null);
+  const [plResult, setPLResult] = useState<PLResult | null>(null);
   const [idqAnalysis, setIdqAnalysis] = useState<IDQAnalysisResult | null>(null);
   const [cfoAnalysis, setCfoAnalysis] = useState<CFOAnalysisResult | null>(null);
 
@@ -84,10 +86,13 @@ const Index = () => {
           const { reportType } = await parseFile(files[0]);
           setSingleAnalysis(generateMockAnalysis(files[0].name, reportType === 'unknown' ? 'seller' : reportType));
           setMultiAnalysis(null);
+          setPLResult(null);
         } else {
           // Large file - use massive processor results
           const analysis = convertMetricsToAnalysis(metrics, fileInfos);
+          const pl = convertMetricsToPL(metrics);
           setMultiAnalysis(analysis);
+          setPLResult(pl);
           setSingleAnalysis(null);
         }
       } else {
@@ -97,7 +102,9 @@ const Index = () => {
         // In production, you'd merge all metrics here
         // For now, convert first file's metrics
         const analysis = convertMetricsToAnalysis(mergedMetrics, fileInfos);
+        const pl = convertMetricsToPL(mergedMetrics);
         setMultiAnalysis(analysis);
+        setPLResult(pl);
         setSingleAnalysis(null);
       }
 
@@ -146,6 +153,7 @@ const Index = () => {
   const handleCEOReset = useCallback(() => {
     setSingleAnalysis(null);
     setMultiAnalysis(null);
+    setPLResult(null);
     setError(null);
   }, []);
 
@@ -166,7 +174,11 @@ const Index = () => {
       <div className="min-h-screen bg-background">
         <Header />
         <main className="container mx-auto px-4 pt-24 pb-12">
-          <MultiDashboard analysis={multiAnalysis} onReset={handleCEOReset} />
+          <MultiDashboard 
+            analysis={multiAnalysis} 
+            plResult={plResult || undefined}
+            onReset={handleCEOReset} 
+          />
         </main>
       </div>
     );
