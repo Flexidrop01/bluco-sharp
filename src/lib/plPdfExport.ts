@@ -1,5 +1,3 @@
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { PLMetrics, MonthlyPLData } from './metricsToPL';
 
 interface PLExportOptions {
@@ -10,8 +8,14 @@ interface PLExportOptions {
   accountName?: string;
 }
 
-export const exportPLToPDF = (options: PLExportOptions) => {
+export const exportPLToPDF = async (options: PLExportOptions) => {
   const { total, monthly, currency, period, accountName = 'Amazon Seller Account' } = options;
+  
+  // Dynamic import to avoid React conflict
+  const jsPDFModule = await import('jspdf');
+  const jsPDF = jsPDFModule.default;
+  const autoTableModule = await import('jspdf-autotable');
+  const autoTable = autoTableModule.default;
   
   const doc = new jsPDF('p', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -26,7 +30,7 @@ export const exportPLToPDF = (options: PLExportOptions) => {
   const formatPercent = (value: number) => `${value.toFixed(2)}%`;
 
   // Header
-  doc.setFillColor(30, 41, 59); // Dark blue
+  doc.setFillColor(30, 41, 59);
   doc.rect(0, 0, pageWidth, 40, 'F');
   
   doc.setTextColor(255, 255, 255);
@@ -44,7 +48,7 @@ export const exportPLToPDF = (options: PLExportOptions) => {
   doc.setTextColor(0, 0, 0);
 
   // Executive Summary Box
-  doc.setFillColor(240, 253, 244); // Light green
+  doc.setFillColor(240, 253, 244);
   doc.roundedRect(margin, yPos, pageWidth - 2 * margin, 35, 3, 3, 'F');
   
   doc.setFontSize(11);
@@ -54,15 +58,10 @@ export const exportPLToPDF = (options: PLExportOptions) => {
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   
-  const summaryData = [
-    [`Total Income: ${formatCurrency(total.totalIncome)}`, `EBITDA: ${formatCurrency(total.ebitda)} (${formatPercent(total.ebitdaPercent)})`],
-    [`Total Expenses: ${formatCurrency(total.totalExpenses)}`, `Net Profit: ${formatCurrency(total.netProfit)} (${formatPercent(total.netProfitPercent)})`]
-  ];
-  
-  doc.text(summaryData[0][0], margin + 5, yPos + 18);
-  doc.text(summaryData[0][1], pageWidth / 2 + 5, yPos + 18);
-  doc.text(summaryData[1][0], margin + 5, yPos + 28);
-  doc.text(summaryData[1][1], pageWidth / 2 + 5, yPos + 28);
+  doc.text(`Total Income: ${formatCurrency(total.totalIncome)}`, margin + 5, yPos + 18);
+  doc.text(`EBITDA: ${formatCurrency(total.ebitda)} (${formatPercent(total.ebitdaPercent)})`, pageWidth / 2 + 5, yPos + 18);
+  doc.text(`Total Expenses: ${formatCurrency(total.totalExpenses)}`, margin + 5, yPos + 28);
+  doc.text(`Net Profit: ${formatCurrency(total.netProfit)} (${formatPercent(total.netProfitPercent)})`, pageWidth / 2 + 5, yPos + 28);
   
   yPos += 45;
 
@@ -88,7 +87,7 @@ export const exportPLToPDF = (options: PLExportOptions) => {
     styles: { fontSize: 9 }
   });
 
-  yPos = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
+  yPos = (doc as any).lastAutoTable.finalY + 10;
 
   // Sales Revenue Section
   doc.setFontSize(12);
@@ -115,7 +114,7 @@ export const exportPLToPDF = (options: PLExportOptions) => {
     styles: { fontSize: 9 }
   });
 
-  yPos = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
+  yPos = (doc as any).lastAutoTable.finalY + 10;
 
   // Expenses Section
   doc.setFontSize(12);
@@ -146,8 +145,7 @@ export const exportPLToPDF = (options: PLExportOptions) => {
     styles: { fontSize: 9 }
   });
 
-  // Check if we need a new page for monthly data
-  yPos = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
+  yPos = (doc as any).lastAutoTable.finalY + 10;
   
   if (yPos > 230) {
     doc.addPage();
@@ -177,10 +175,10 @@ export const exportPLToPDF = (options: PLExportOptions) => {
     styles: { fontSize: 9 }
   });
 
-  yPos = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
+  yPos = (doc as any).lastAutoTable.finalY + 10;
 
   // EBITDA & Net Profit Section
-  doc.setFillColor(254, 243, 199); // Light yellow
+  doc.setFillColor(254, 243, 199);
   doc.roundedRect(margin, yPos, pageWidth - 2 * margin, 30, 3, 3, 'F');
   
   doc.setFontSize(11);
@@ -239,7 +237,7 @@ export const exportPLToPDF = (options: PLExportOptions) => {
       }
     });
 
-    yPos = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
+    yPos = (doc as any).lastAutoTable.finalY + 10;
   }
 
   // Discrepancy Alert
@@ -249,13 +247,13 @@ export const exportPLToPDF = (options: PLExportOptions) => {
       yPos = 20;
     }
 
-    doc.setFillColor(254, 226, 226); // Light red
+    doc.setFillColor(254, 226, 226);
     doc.roundedRect(margin, yPos, pageWidth - 2 * margin, 20, 3, 3, 'F');
     
     doc.setTextColor(185, 28, 28);
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
-    doc.text('⚠️ DISCREPANCY DETECTED', margin + 5, yPos + 8);
+    doc.text('DISCREPANCY DETECTED', margin + 5, yPos + 8);
     doc.setFont('helvetica', 'normal');
     doc.text(`Difference of ${formatCurrency(total.mistake)} between calculated (${formatCurrency(total.calculatedTotal)}) and actual (${formatCurrency(total.actualTotal)})`, margin + 5, yPos + 15);
     doc.setTextColor(0, 0, 0);
