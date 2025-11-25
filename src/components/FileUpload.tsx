@@ -1,16 +1,17 @@
 import { useState, useCallback } from 'react';
-import { Upload, FileSpreadsheet, AlertCircle, Loader2 } from 'lucide-react';
+import { Upload, FileSpreadsheet, AlertCircle, Loader2, X, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 interface FileUploadProps {
-  onFileSelect: (file: File) => void;
+  onFilesSelect: (files: File[]) => void;
   isProcessing: boolean;
   error: string | null;
 }
 
-const FileUpload = ({ onFileSelect, isProcessing, error }: FileUploadProps) => {
+const FileUpload = ({ onFilesSelect, isProcessing, error }: FileUploadProps) => {
   const [isDragOver, setIsDragOver] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -25,19 +26,33 @@ const FileUpload = ({ onFileSelect, isProcessing, error }: FileUploadProps) => {
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
-    
-    const files = e.dataTransfer.files;
+    const files = Array.from(e.dataTransfer.files);
     if (files.length > 0) {
-      onFileSelect(files[0]);
+      setSelectedFiles(prev => [...prev, ...files]);
     }
-  }, [onFileSelect]);
+  }, []);
 
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      onFileSelect(files[0]);
+      setSelectedFiles(prev => [...prev, ...Array.from(files)]);
     }
-  }, [onFileSelect]);
+    e.target.value = '';
+  }, []);
+
+  const removeFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleAnalyze = () => {
+    if (selectedFiles.length > 0) {
+      onFilesSelect(selectedFiles);
+    }
+  };
+
+  const clearAll = () => {
+    setSelectedFiles([]);
+  };
 
   return (
     <div className="w-full max-w-2xl mx-auto">
@@ -56,6 +71,7 @@ const FileUpload = ({ onFileSelect, isProcessing, error }: FileUploadProps) => {
           id="file-input"
           type="file"
           accept=".csv,.xlsx,.xls,.txt"
+          multiple
           className="hidden"
           onChange={handleFileInput}
           disabled={isProcessing}
@@ -69,7 +85,7 @@ const FileUpload = ({ onFileSelect, isProcessing, error }: FileUploadProps) => {
               </div>
               <div className="text-center">
                 <p className="text-lg font-medium text-foreground">
-                  Analizando archivo...
+                  Analizando {selectedFiles.length} archivo{selectedFiles.length > 1 ? 's' : ''}...
                 </p>
                 <p className="text-sm text-muted-foreground mt-1">
                   CEO Brain procesando datos
@@ -84,37 +100,80 @@ const FileUpload = ({ onFileSelect, isProcessing, error }: FileUploadProps) => {
               
               <div className="text-center">
                 <p className="text-lg font-medium text-foreground">
-                  Arrastra tu informe de Amazon aquí
+                  Arrastra tus informes de Amazon aquí
                 </p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  o haz clic para seleccionar archivo
+                  Uno o varios archivos de cualquier marketplace
                 </p>
               </div>
               
               <div className="flex items-center gap-4 text-xs text-muted-foreground">
                 <div className="flex items-center gap-1.5">
                   <FileSpreadsheet className="w-4 h-4" />
-                  <span>CSV</span>
+                  <span>CSV / Excel</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <FileSpreadsheet className="w-4 h-4" />
-                  <span>Excel (.xlsx, .xls)</span>
+                  <Globe className="w-4 h-4" />
+                  <span>Multi-país</span>
                 </div>
               </div>
               
               <Button variant="hero" size="lg" className="mt-2">
-                Seleccionar Archivo
+                Seleccionar Archivos
               </Button>
             </>
           )}
         </div>
       </div>
+
+      {selectedFiles.length > 0 && !isProcessing && (
+        <div className="mt-4 glass-card p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-foreground">
+              Archivos seleccionados ({selectedFiles.length})
+            </h3>
+            <Button variant="ghost" size="sm" onClick={clearAll} className="text-muted-foreground hover:text-foreground">
+              Limpiar
+            </Button>
+          </div>
+          
+          <div className="space-y-2 max-h-40 overflow-y-auto scrollbar-thin">
+            {selectedFiles.map((file, index) => (
+              <div key={index} className="flex items-center justify-between p-2 rounded-lg bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <FileSpreadsheet className="w-4 h-4 text-primary" />
+                  <span className="text-sm truncate max-w-[280px]">{file.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    ({(file.size / 1024).toFixed(1)} KB)
+                  </span>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-6 w-6" 
+                  onClick={(e) => { e.stopPropagation(); removeFile(index); }}
+                >
+                  <X className="w-3 h-3" />
+                </Button>
+              </div>
+            ))}
+          </div>
+          
+          <Button 
+            className="w-full" 
+            variant="hero"
+            onClick={(e) => { e.stopPropagation(); handleAnalyze(); }}
+          >
+            Analizar {selectedFiles.length} archivo{selectedFiles.length > 1 ? 's' : ''}
+          </Button>
+        </div>
+      )}
       
       {error && (
         <div className="mt-4 p-4 rounded-lg bg-destructive/10 border border-destructive/30 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-medium text-destructive">Error al procesar archivo</p>
+            <p className="text-sm font-medium text-destructive">Error al procesar</p>
             <p className="text-sm text-destructive/80 mt-1">{error}</p>
           </div>
         </div>
@@ -133,6 +192,13 @@ const FileUpload = ({ onFileSelect, isProcessing, error }: FileUploadProps) => {
             PO, shortages, chargebacks, co-op, deducciones
           </p>
         </div>
+      </div>
+
+      <div className="mt-4 glass-card p-4">
+        <p className="text-xs text-muted-foreground text-center">
+          <Globe className="w-3 h-3 inline mr-1" />
+          Soporta USA, Europa, Japón, México, Canadá, Australia y más
+        </p>
       </div>
     </div>
   );
