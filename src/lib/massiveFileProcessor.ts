@@ -152,10 +152,9 @@ export interface SKUAggregates {
 
 export interface FulfillmentAggregates {
   model: string;
-  grossSales: number;        // Ventas SIN IVA (solo productSales)
-  salesWithTax: number;      // Ventas CON IVA (productSales + productSalesTax)
+  grossSales: number;
   fees: number;
-  refunds: number;           // Reembolsos CON IVA
+  refunds: number;
   transactionCount: number;
 }
 
@@ -492,23 +491,12 @@ const processRow = (
   // === FULFILLMENT BREAKDOWN ===
   if (fulfillmentModel && fulfillmentModel !== 'Unknown' && !isOtherMovement) {
     if (!metrics.byFulfillment.has(fulfillmentModel)) {
-      metrics.byFulfillment.set(fulfillmentModel, { 
-        model: fulfillmentModel, 
-        grossSales: 0,      // Sin IVA
-        salesWithTax: 0,    // Con IVA
-        fees: 0, 
-        refunds: 0, 
-        transactionCount: 0 
-      });
+      metrics.byFulfillment.set(fulfillmentModel, { model: fulfillmentModel, grossSales: 0, fees: 0, refunds: 0, transactionCount: 0 });
     }
     const fulfillmentData = metrics.byFulfillment.get(fulfillmentModel)!;
-    if (!isRefund && productSales > 0) {
-      fulfillmentData.grossSales += productSales;
-      fulfillmentData.salesWithTax += (productSales + productSalesTax);
-    }
+    if (!isRefund && productSales > 0) fulfillmentData.grossSales += productSales;
     fulfillmentData.fees += (sellingFees + fbaFees + otherTransactionFees + otherFees);
-    // Reembolsos CON IVA
-    if (isRefund) fulfillmentData.refunds += Math.abs(productSales + productSalesTax);
+    if (isRefund) fulfillmentData.refunds += Math.abs(productSales);
     fulfillmentData.transactionCount++;
   }
   
