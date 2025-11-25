@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { 
   ArrowLeft, Download, Globe, BarChart3, Layers, 
-  AlertTriangle, Target, Package, FileText, MapPin, Receipt, Calculator
+  AlertTriangle, Target, Package, FileText, MapPin, Receipt, Calculator, Brain
 } from 'lucide-react';
 import GlobalSummary from './GlobalSummary';
 import CountryBreakdown from './CountryBreakdown';
@@ -13,15 +13,18 @@ import DemographicAnalysis from './DemographicAnalysis';
 import SKURanking from './SKURanking';
 import TransactionTypeBreakdown from './TransactionTypeBreakdown';
 import { PLDashboard } from './PLDashboard';
+import CEOBrainPLTable from './CEOBrainPLTable';
 import { PLResult } from '@/lib/metricsToPL';
+import { MonthlyPLTable } from '@/lib/ceoBrainPLBuilder';
 
 interface MultiDashboardProps {
   analysis: MultiAnalysisResult;
   plResult?: PLResult;
+  ceoBrainPL?: MonthlyPLTable;
   onReset: () => void;
 }
 
-const MultiDashboard = ({ analysis, plResult, onReset }: MultiDashboardProps) => {
+const MultiDashboard = ({ analysis, plResult, ceoBrainPL, onReset }: MultiDashboardProps) => {
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat('es-ES', {
       dateStyle: 'long',
@@ -131,6 +134,10 @@ const MultiDashboard = ({ analysis, plResult, onReset }: MultiDashboardProps) =>
           <TabsTrigger value="pl" className="flex items-center gap-2">
             <Calculator className="w-4 h-4" />
             <span className="hidden sm:inline">P&L</span>
+          </TabsTrigger>
+          <TabsTrigger value="ceobrain" className="flex items-center gap-2 bg-primary/10">
+            <Brain className="w-4 h-4 text-primary" />
+            <span className="hidden sm:inline">CEO Brain P&L</span>
           </TabsTrigger>
           <TabsTrigger value="alerts" className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4" />
@@ -257,6 +264,29 @@ const MultiDashboard = ({ analysis, plResult, onReset }: MultiDashboardProps) =>
               <CardContent className="p-8 text-center">
                 <Calculator className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                 <p className="text-muted-foreground">P&L se genera automáticamente al procesar archivos de transacciones</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="ceobrain">
+          {ceoBrainPL ? (
+            <CEOBrainPLTable 
+              plTable={ceoBrainPL}
+              onExportPDF={() => {
+                // TODO: Implement PDF export
+                console.log('Export CEO Brain P&L to PDF');
+              }}
+              onExportExcel={() => {
+                // TODO: Implement Excel export
+                console.log('Export CEO Brain P&L to Excel');
+              }}
+            />
+          ) : (
+            <Card className="glass-card">
+              <CardContent className="p-8 text-center">
+                <Brain className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">CEO Brain P&L mensual se genera automáticamente al procesar archivos de transacciones</p>
               </CardContent>
             </Card>
           )}
