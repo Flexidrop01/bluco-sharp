@@ -40,9 +40,12 @@ export interface AggregatedMetrics {
   skippedRows: number;
   
   // Revenue - EXACT COLUMNS FROM AMAZON
-  grossSales: number;
+  // VENTAS SIN IVA = productSales (solo columna "ventas de productos")
+  // VENTAS CON IVA = productSales + productSalesTax (ventas + impuesto)
+  salesWithTax: number;              // ventas de productos + impuesto = VENTAS CON IVA
+  grossSales: number;                // TODAS las columnas de ingresos sumadas
   grossSalesUSD: number;
-  productSales: number;              // ventas de productos
+  productSales: number;              // ventas de productos = VENTAS SIN IVA
   productSalesTax: number;           // impuesto de ventas de productos
   shippingCredits: number;           // abonos de envío
   shippingCreditsTax: number;        // impuestos por abonos de envío
@@ -194,6 +197,7 @@ const createEmptyMetrics = (): AggregatedMetrics => ({
   totalRows: 0,
   validTransactions: 0,
   skippedRows: 0,
+  salesWithTax: 0,
   grossSales: 0,
   grossSalesUSD: 0,
   productSales: 0,
@@ -529,7 +533,10 @@ const processRow = (
 
 // Finalize metrics after all rows processed
 const finalizeMetrics = (metrics: AggregatedMetrics): void => {
-  // INGRESOS TOTALES: suma de TODAS las columnas de ingresos
+  // VENTAS CON IVA = productSales + productSalesTax (solo ventas de productos con su impuesto)
+  metrics.salesWithTax = metrics.productSales + metrics.productSalesTax;
+  
+  // INGRESOS TOTALES (grossSales): suma de TODAS las columnas de ingresos
   // (productSales + productSalesTax + shippingCredits + shippingCreditsTax + 
   //  giftwrapCredits + giftwrapCreditsTax + promotionalRebates + promotionalRebatesTax + taxCollected)
   metrics.grossSales = metrics.productSales + metrics.productSalesTax + 
@@ -543,7 +550,7 @@ const finalizeMetrics = (metrics: AggregatedMetrics): void => {
   metrics.totalFees = metrics.sellingFees + metrics.fbaFees + 
                       metrics.otherTransactionFees + metrics.otherFees;
   
-  // Net sales = Ingresos sin los tax/rebates (solo ventas de producto)
+  // Net sales = Ventas sin IVA (solo productSales)
   metrics.netSales = metrics.productSales;
   
   // EBITDA = Ingresos + Gastos (gastos ya son negativos) + Reembolsos
@@ -590,6 +597,8 @@ const finalizeMetrics = (metrics: AggregatedMetrics): void => {
   }
   
   console.log('[CEO Brain] Final metrics:', {
+    productSales: metrics.productSales.toFixed(2),
+    salesWithTax: metrics.salesWithTax.toFixed(2),
     grossSales: metrics.grossSales.toFixed(2),
     totalFees: metrics.totalFees.toFixed(2),
     ebitda: metrics.ebitda.toFixed(2),

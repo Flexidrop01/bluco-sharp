@@ -18,12 +18,15 @@ const formatEUR = (amount: number, showSign = false) => {
 };
 
 const CEOPLDashboard = ({ metrics }: CEOPLDashboardProps) => {
-  // === INGRESOS TOTALES ===
-  // CON IVA = suma de columnas 13-21 (productSales + productSalesTax + shippingCredits + etc.)
-  const ingresosConIVA = metrics.grossSales;
+  // === VENTAS (solo productos) ===
+  // SIN IVA = solo columna "ventas de productos"
+  const ventasSinIVA = metrics.productSales;
   
-  // SIN IVA = solo columna "ventas de productos" (sin el impuesto)
-  const ingresosSinIVA = metrics.productSales;
+  // CON IVA = columna "ventas de productos" + "impuesto de ventas de productos"
+  const ventasConIVA = metrics.salesWithTax;
+  
+  // === INGRESOS TOTALES (todas las columnas de ingresos) ===
+  const ingresosTotales = metrics.grossSales;
   
   // === GASTOS TOTALES (suma de columnas 22-25, ya negativos) ===
   const gastosTotales = metrics.totalFees;
@@ -31,7 +34,7 @@ const CEOPLDashboard = ({ metrics }: CEOPLDashboardProps) => {
   // === OTROS MOVIMIENTOS (transferencias, no son ingresos ni gastos) ===
   const otrosMovimientos = metrics.otherMovements;
   
-  // === VENTAS FBA/FBM con IVA ===
+  // === VENTAS FBA/FBM (productSales, sin IVA separado por fulfillment) ===
   const fbaData = metrics.byFulfillment.get('FBA');
   const fbmData = metrics.byFulfillment.get('FBM');
   const ventasFBA = fbaData?.grossSales || 0;
@@ -49,7 +52,7 @@ const CEOPLDashboard = ({ metrics }: CEOPLDashboardProps) => {
   const ebitda = metrics.ebitda;
   
   // Diferencia para verificación (debe ser ~0 si todo está clasificado)
-  const diferencia = metrics.actualTotal - (ingresosConIVA + gastosTotales + otrosMovimientos);
+  const diferencia = metrics.actualTotal - (ingresosTotales + gastosTotales + otrosMovimientos);
 
   return (
     <div className="space-y-6">
@@ -62,8 +65,8 @@ const CEOPLDashboard = ({ metrics }: CEOPLDashboardProps) => {
                 <DollarSign className="w-6 h-6 text-green-500" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Ingresos Totales</p>
-                <p className="text-2xl font-bold text-green-500">{formatEUR(ingresosConIVA)}</p>
+                <p className="text-xs text-muted-foreground">Ventas (Con IVA)</p>
+                <p className="text-2xl font-bold text-green-500">{formatEUR(ventasConIVA)}</p>
               </div>
             </div>
           </CardContent>
@@ -125,13 +128,13 @@ const CEOPLDashboard = ({ metrics }: CEOPLDashboardProps) => {
           <CardContent>
             <Table>
               <TableBody>
-                <TableRow className="border-b-0">
-                  <TableCell className="font-medium">Ingresos Totales (Sin IVA)</TableCell>
-                  <TableCell className="text-right font-bold text-green-500">{formatEUR(ingresosSinIVA)}</TableCell>
+                <TableRow className="border-b-0 bg-green-500/10">
+                  <TableCell className="font-bold">Ventas Totales (Sin IVA)</TableCell>
+                  <TableCell className="text-right font-bold text-green-500">{formatEUR(ventasSinIVA)}</TableCell>
                 </TableRow>
-                <TableRow className="border-b-0">
-                  <TableCell className="font-medium">Ingresos Totales (Con IVA)</TableCell>
-                  <TableCell className="text-right font-bold text-green-500">{formatEUR(ingresosConIVA)}</TableCell>
+                <TableRow className="border-b-0 bg-green-500/10">
+                  <TableCell className="font-bold">Ventas Totales (Con IVA)</TableCell>
+                  <TableCell className="text-right font-bold text-green-500">{formatEUR(ventasConIVA)}</TableCell>
                 </TableRow>
                 <TableRow className="border-b-2 border-border">
                   <TableCell colSpan={2} className="h-2"></TableCell>
@@ -215,9 +218,9 @@ const CEOPLDashboard = ({ metrics }: CEOPLDashboardProps) => {
                   <TableCell className="text-right text-red-500">{formatEUR(comisionesVentas)}</TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell className="pl-8 text-muted-foreground text-sm">% sobre ingresos</TableCell>
+                  <TableCell className="pl-8 text-muted-foreground text-sm">% sobre ventas sin IVA</TableCell>
                   <TableCell className="text-right text-muted-foreground text-sm">
-                    {ingresosConIVA > 0 ? ((Math.abs(comisionesVentas) / ingresosConIVA) * 100).toFixed(2) : 0}%
+                    {ventasSinIVA > 0 ? ((Math.abs(comisionesVentas) / ventasSinIVA) * 100).toFixed(2) : 0}%
                   </TableCell>
                 </TableRow>
                 
@@ -341,8 +344,8 @@ const CEOPLDashboard = ({ metrics }: CEOPLDashboardProps) => {
             <Table>
               <TableBody>
                 <TableRow>
-                  <TableCell>Ingresos Totales</TableCell>
-                  <TableCell className="text-right font-medium text-green-500">{formatEUR(ingresosConIVA)}</TableCell>
+                  <TableCell>Ingresos Totales (todas columnas)</TableCell>
+                  <TableCell className="text-right font-medium text-green-500">{formatEUR(ingresosTotales)}</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell>Gastos Totales</TableCell>
@@ -354,7 +357,7 @@ const CEOPLDashboard = ({ metrics }: CEOPLDashboardProps) => {
                 </TableRow>
                 <TableRow className="border-t border-border">
                   <TableCell className="font-medium">= Total Calculado</TableCell>
-                  <TableCell className="text-right font-medium">{formatEUR(ingresosConIVA + gastosTotales + otrosMovimientos)}</TableCell>
+                  <TableCell className="text-right font-medium">{formatEUR(ingresosTotales + gastosTotales + otrosMovimientos)}</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell>Total según archivo</TableCell>
