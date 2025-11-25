@@ -34,13 +34,13 @@ const CEOPLDashboard = ({ metrics }: CEOPLDashboardProps) => {
   // === OTROS MOVIMIENTOS (transferencias, no son ingresos ni gastos) ===
   const otrosMovimientos = metrics.otherMovements;
   
-  // === VENTAS FBA/FBM (productSales, sin IVA separado por fulfillment) ===
+  // === VENTAS FBA/FBM CON IVA (salesWithTax incluye productSales + productSalesTax) ===
   const fbaData = metrics.byFulfillment.get('FBA');
   const fbmData = metrics.byFulfillment.get('FBM');
-  const ventasFBA = fbaData?.grossSales || 0;
-  const refundsFBA = fbaData?.refunds || 0;
-  const ventasFBM = fbmData?.grossSales || 0;
-  const refundsFBM = fbmData?.refunds || 0;
+  const ventasFBAConIVA = fbaData?.salesWithTax || 0;
+  const refundsFBAConIVA = fbaData?.refundsWithTax || 0;
+  const ventasFBMConIVA = fbmData?.salesWithTax || 0;
+  const refundsFBMConIVA = fbmData?.refundsWithTax || 0;
   
   // Desglose de gastos
   const comisionesVentas = metrics.sellingFees;
@@ -146,11 +146,11 @@ const CEOPLDashboard = ({ metrics }: CEOPLDashboardProps) => {
                     <Package className="w-4 h-4 text-blue-500" />
                     Ventas FBA (IVA incluido)
                   </TableCell>
-                  <TableCell className="text-right">{formatEUR(ventasFBA)}</TableCell>
+                  <TableCell className="text-right">{formatEUR(ventasFBAConIVA)}</TableCell>
                 </TableRow>
                 <TableRow className="bg-blue-500/5">
-                  <TableCell className="pl-8 text-muted-foreground">Reembolsos FBA</TableCell>
-                  <TableCell className="text-right text-red-500">{formatEUR(-refundsFBA)}</TableCell>
+                  <TableCell className="pl-8 text-muted-foreground">Reembolsos FBA (IVA incluido)</TableCell>
+                  <TableCell className="text-right text-red-500">{formatEUR(-refundsFBAConIVA)}</TableCell>
                 </TableRow>
                 
                 {/* FBM */}
@@ -159,11 +159,11 @@ const CEOPLDashboard = ({ metrics }: CEOPLDashboardProps) => {
                     <Truck className="w-4 h-4 text-orange-500" />
                     Ventas FBM (IVA incluido)
                   </TableCell>
-                  <TableCell className="text-right">{formatEUR(ventasFBM)}</TableCell>
+                  <TableCell className="text-right">{formatEUR(ventasFBMConIVA)}</TableCell>
                 </TableRow>
                 <TableRow className="bg-orange-500/5">
-                  <TableCell className="pl-8 text-muted-foreground">Reembolsos FBM</TableCell>
-                  <TableCell className="text-right text-red-500">{formatEUR(-refundsFBM)}</TableCell>
+                  <TableCell className="pl-8 text-muted-foreground">Reembolsos FBM (IVA incluido)</TableCell>
+                  <TableCell className="text-right text-red-500">{formatEUR(-refundsFBMConIVA)}</TableCell>
                 </TableRow>
                 
                 <TableRow className="border-b-2 border-border">
@@ -230,9 +230,9 @@ const CEOPLDashboard = ({ metrics }: CEOPLDashboardProps) => {
                   <TableCell className="text-right text-red-500">{formatEUR(comisionesFBA)}</TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell className="pl-8 text-muted-foreground text-sm">% sobre ventas FBA</TableCell>
+                  <TableCell className="pl-8 text-muted-foreground text-sm">% sobre ventas FBA con IVA</TableCell>
                   <TableCell className="text-right text-muted-foreground text-sm">
-                    {ventasFBA > 0 ? ((Math.abs(comisionesFBA) / ventasFBA) * 100).toFixed(2) : 0}%
+                    {ventasFBAConIVA > 0 ? ((Math.abs(comisionesFBA) / ventasFBAConIVA) * 100).toFixed(2) : 0}%
                   </TableCell>
                 </TableRow>
                 

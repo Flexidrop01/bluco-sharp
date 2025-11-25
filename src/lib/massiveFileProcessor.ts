@@ -152,9 +152,11 @@ export interface SKUAggregates {
 
 export interface FulfillmentAggregates {
   model: string;
-  grossSales: number;
+  grossSales: number;           // Ventas SIN IVA (solo productSales)
+  salesWithTax: number;         // Ventas CON IVA (productSales + productSalesTax)
   fees: number;
-  refunds: number;
+  refunds: number;              // Reembolsos SIN IVA
+  refundsWithTax: number;       // Reembolsos CON IVA
   transactionCount: number;
 }
 
@@ -488,15 +490,36 @@ const processRow = (
     if (fulfillmentModel !== 'Unknown') skuData.fulfillment = fulfillmentModel;
   }
   
-  // === FULFILLMENT BREAKDOWN ===
+  // === FULFILLMENT BREAKDOWN (FBA/FBM) ===
   if (fulfillmentModel && fulfillmentModel !== 'Unknown' && !isOtherMovement) {
     if (!metrics.byFulfillment.has(fulfillmentModel)) {
-      metrics.byFulfillment.set(fulfillmentModel, { model: fulfillmentModel, grossSales: 0, fees: 0, refunds: 0, transactionCount: 0 });
+      metrics.byFulfillment.set(fulfillmentModel, { 
+        model: fulfillmentModel, 
+        grossSales: 0,       // Ventas SIN IVA
+        salesWithTax: 0,     // Ventas CON IVA
+        fees: 0, 
+        refunds: 0,          // Reembolsos SIN IVA
+        refundsWithTax: 0,   // Reembolsos CON IVA
+        transactionCount: 0 
+      });
     }
     const fulfillmentData = metrics.byFulfillment.get(fulfillmentModel)!;
-    if (!isRefund && productSales > 0) fulfillmentData.grossSales += productSales;
+    
+    // Ventas = filas donde productSales > 0 (ventas normales)
+    // Reembolsos = filas donde productSales < 0 (o tipo es reembolso)
+    const rowSalesWithTax = productSales + productSalesTax;
+    
+    if (isRefund || productSales < 0) {
+      // Es un reembolso (productSales y productSalesTax son negativos)
+      fulfillmentData.refunds += Math.abs(productSales);
+      fulfillmentData.refundsWithTax += Math.abs(rowSalesWithTax);
+    } else if (productSales > 0) {
+      // Es una venta (productSales y productSalesTax son positivos)
+      fulfillmentData.grossSales += productSales;
+      fulfillmentData.salesWithTax += rowSalesWithTax;
+    }
+    
     fulfillmentData.fees += (sellingFees + fbaFees + otherTransactionFees + otherFees);
-    if (isRefund) fulfillmentData.refunds += Math.abs(productSales);
     fulfillmentData.transactionCount++;
   }
   
@@ -596,17 +619,26 @@ const finalizeMetrics = (metrics: AggregatedMetrics): void => {
     data.fees = Math.abs(data.fees);
   }
   
-  console.log('[CEO Brain] Final metrics:', {
-    productSales: metrics.productSales.toFixed(2),
-    salesWithTax: metrics.salesWithTax.toFixed(2),
-    grossSales: metrics.grossSales.toFixed(2),
-    totalFees: metrics.totalFees.toFixed(2),
-    ebitda: metrics.ebitda.toFixed(2),
-    otherMovements: metrics.otherMovements.toFixed(2),
-    actualTotal: metrics.actualTotal.toFixed(2),
-    marketplaces: Array.from(metrics.marketplaces),
-    transactionTypes: Array.from(metrics.byTransactionType.keys())
-  });
+  // Fulfillment breakdown
+  const fbaData = metrics.byFulfillment.get('FBA');
+  const fbmData = metrics.byFulfillment.get('FBM');
+  
+  console.log('[CEO Brain] === RESUMEN FINAL ===');
+  console.log('[CEO Brain] VENTAS SIN IVA (productSales):', metrics.productSales.toFixed(2), '€');
+  console.log('[CEO Brain] IVA ventas (productSalesTax):', metrics.productSalesTax.toFixed(2), '€');
+  console.log('[CEO Brain] VENTAS CON IVA (salesWithTax):', metrics.salesWithTax.toFixed(2), '€');
+  console.log('[CEO Brain] Ingresos totales (grossSales):', metrics.grossSales.toFixed(2), '€');
+  console.log('[CEO Brain] Gastos totales (totalFees):', metrics.totalFees.toFixed(2), '€');
+  console.log('[CEO Brain] EBITDA:', metrics.ebitda.toFixed(2), '€');
+  console.log('[CEO Brain] Otros movimientos:', metrics.otherMovements.toFixed(2), '€');
+  console.log('[CEO Brain] Total según archivo:', metrics.actualTotal.toFixed(2), '€');
+  console.log('[CEO Brain] FBA - Ventas con IVA:', fbaData?.salesWithTax?.toFixed(2) || 0, '€');
+  console.log('[CEO Brain] FBA - Reembolsos con IVA:', fbaData?.refundsWithTax?.toFixed(2) || 0, '€');
+  console.log('[CEO Brain] FBM - Ventas con IVA:', fbmData?.salesWithTax?.toFixed(2) || 0, '€');
+  console.log('[CEO Brain] FBM - Reembolsos con IVA:', fbmData?.refundsWithTax?.toFixed(2) || 0, '€');
+  console.log('[CEO Brain] Columnas detectadas:', Object.fromEntries(metrics.detectedColumns));
+  console.log('[CEO Brain] Marketplaces:', Array.from(metrics.marketplaces));
+  console.log('[CEO Brain] Tipos de transacción:', Array.from(metrics.byTransactionType.keys()));
 };
 
 // Build column map from headers
@@ -678,8 +710,38 @@ export const processMassiveExcel = async (
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
+        
+        // Buscar la hoja correcta - priorizar hojas con datos transaccionales
+        // La hoja de datos suele tener nombre como "I", "Datos", "Data", "Transactions" 
+        // o ser la que tiene más filas
+        let targetSheet = workbook.SheetNames[0];
+        let maxRows = 0;
+        
+        for (const sheetName of workbook.SheetNames) {
+          const ws = workbook.Sheets[sheetName];
+          const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+          const rowCount = range.e.r - range.s.r + 1;
+          
+          console.log(`[CEO Brain] Sheet "${sheetName}": ${rowCount} rows`);
+          
+          // Buscar hojas con nombre "I", "Datos", "Data", "Transactions", etc.
+          const lowerName = sheetName.toLowerCase();
+          if (lowerName === 'i' || lowerName === 'datos' || lowerName === 'data' || 
+              lowerName.includes('transaction') || lowerName.includes('raw')) {
+            targetSheet = sheetName;
+            console.log(`[CEO Brain] Selected sheet by name: "${sheetName}"`);
+            break;
+          }
+          
+          // O seleccionar la hoja con más filas (probablemente los datos)
+          if (rowCount > maxRows) {
+            maxRows = rowCount;
+            targetSheet = sheetName;
+          }
+        }
+        
+        console.log(`[CEO Brain] Using sheet: "${targetSheet}"`);
+        const worksheet = workbook.Sheets[targetSheet];
         const allData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as unknown[][];
         
         const metrics = createEmptyMetrics();
@@ -696,6 +758,7 @@ export const processMassiveExcel = async (
               columnMap = buildColumnMap(headers);
               metrics.detectedColumns = columnMap;
               headerFound = true;
+              console.log(`[CEO Brain] Header found at row ${i + 1}:`, headers.slice(0, 10));
             }
             continue;
           }
