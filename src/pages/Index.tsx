@@ -4,6 +4,8 @@ import FileUpload from '@/components/FileUpload';
 import AnalysisDashboard from '@/components/AnalysisDashboard';
 import IDQFileUpload from '@/components/idq/IDQFileUpload';
 import IDQDashboard from '@/components/idq/IDQDashboard';
+import IDQOptimizerUpload from '@/components/idq/IDQOptimizerUpload';
+import IDQOptimizerDashboard from '@/components/idq/IDQOptimizerDashboard';
 import CFOFileUpload from '@/components/cfo/CFOFileUpload';
 import CFODashboard from '@/components/cfo/CFODashboard';
 import MultiDashboard from '@/components/multi/MultiDashboard';
@@ -14,6 +16,7 @@ import { processMassiveFile } from '@/lib/massiveFileProcessor';
 import { convertMetricsToAnalysis } from '@/lib/metricsToAnalysis';
 import { convertMetricsToPL, PLResult } from '@/lib/metricsToPL';
 import { processCEOBrainPL, MonthlyPLTable } from '@/lib/ceoBrainPLBuilder';
+import { parseIDQVigilanceFile, filterProductsByIdentifiers, IDQOptimizerResult } from '@/lib/idqOptimizerParser';
 import { generateMockAnalysis } from '@/lib/mockAnalysis';
 import { generateMockIDQAnalysis } from '@/lib/mockIdqAnalysis';
 import { generateMockCFOAnalysis } from '@/lib/mockCfoAnalysis';
@@ -39,6 +42,7 @@ const Index = () => {
   const [plResult, setPLResult] = useState<PLResult | null>(null);
   const [ceoBrainPL, setCeoBrainPL] = useState<MonthlyPLTable | null>(null);
   const [idqAnalysis, setIdqAnalysis] = useState<IDQAnalysisResult | null>(null);
+  const [idqOptimizerResult, setIdqOptimizerResult] = useState<IDQOptimizerResult | null>(null);
   const [cfoAnalysis, setCfoAnalysis] = useState<CFOAnalysisResult | null>(null);
 
   // CEO Brain handles both single and multiple files
@@ -132,14 +136,23 @@ const Index = () => {
     }
   }, []);
 
-  const handleIDQFileSelect = useCallback(async (file: File) => {
+  const handleIDQFileSelect = useCallback(async (file: File, identifiers?: string[]) => {
     setIsProcessing(true);
     setError(null);
     try {
-      const { data } = await parseIDQFile(file);
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      setIdqAnalysis(generateMockIDQAnalysis(file.name, data));
-      toast({ title: "Análisis IDQ completado" });
+      // Usar el nuevo IDQ Optimizer Parser
+      let result = await parseIDQVigilanceFile(file);
+      
+      // Si hay identificadores específicos, filtrar
+      if (identifiers && identifiers.length > 0) {
+        result = filterProductsByIdentifiers(result, identifiers);
+      }
+      
+      setIdqOptimizerResult(result);
+      toast({ 
+        title: "Análisis IDQ completado", 
+        description: `${result.totalProducts} productos analizados. Score medio: ${result.averageScore}%` 
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
@@ -211,12 +224,12 @@ const Index = () => {
     );
   }
 
-  if (mode === 'idq' && idqAnalysis) {
+  if (mode === 'idq' && idqOptimizerResult) {
     return (
       <div className="min-h-screen bg-background">
         <Header />
         <main className="container mx-auto px-4 pt-24 pb-12">
-          <IDQDashboard analysis={idqAnalysis} onReset={() => setIdqAnalysis(null)} />
+          <IDQOptimizerDashboard result={idqOptimizerResult} onReset={() => setIdqOptimizerResult(null)} />
         </main>
       </div>
     );
@@ -318,7 +331,7 @@ const Index = () => {
             </TabsContent>
 
             <TabsContent value="idq" className="space-y-8">
-              <IDQFileUpload 
+              <IDQOptimizerUpload 
                 onFileSelect={handleIDQFileSelect}
                 isProcessing={isProcessing}
                 error={error}
