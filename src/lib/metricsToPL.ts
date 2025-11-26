@@ -134,19 +134,27 @@ export interface PLResult {
 // Convert aggregated metrics to P&L structure matching the Bluco format
 export const convertMetricsToPL = (metrics: AggregatedMetrics): PLResult => {
   // Get FBA and FBM data from fulfillment breakdown
-  const fbaData = metrics.byFulfillment.get('FBA') || { grossSales: 0, fees: 0, refunds: 0, transactionCount: 0 };
-  const fbmData = metrics.byFulfillment.get('FBM') || { grossSales: 0, fees: 0, refunds: 0, transactionCount: 0 };
+  const fbaData = metrics.byFulfillment.get('FBA') || { grossSales: 0, salesWithTax: 0, fees: 0, refunds: 0, refundsWithTax: 0, transactionCount: 0 };
+  const fbmData = metrics.byFulfillment.get('FBM') || { grossSales: 0, salesWithTax: 0, fees: 0, refunds: 0, refundsWithTax: 0, transactionCount: 0 };
 
-  // Generate total P&L
+  // IMPORTANTE: Usar los valores EXACTOS de metrics (igual que el resumen ejecutivo)
+  const totalProductSales = metrics.productSales; // Ventas SIN IVA
+  const totalSalesWithTax = metrics.salesWithTax; // Ventas CON IVA
+  const totalTax = metrics.productSalesTax; // IVA
+  const totalFees = Math.abs(metrics.totalFees); // Gastos (valor absoluto)
+  const totalRefunds = metrics.totalRefunds; // Reembolsos
+
+  // Generate total P&L usando datos correctos
   const totalPL = generatePLFromData({
-    grossSales: metrics.grossSales,
+    grossSales: totalProductSales, // Ventas SIN IVA
+    grossSalesWithTax: totalSalesWithTax, // Ventas CON IVA
     fbaGrossSales: fbaData.grossSales,
     fbmGrossSales: fbmData.grossSales,
-    fbaFees: fbaData.fees,
-    fbmFees: fbmData.fees,
+    fbaFees: Math.abs(fbaData.fees),
+    fbmFees: Math.abs(fbmData.fees),
     fbaRefunds: fbaData.refunds,
     fbmRefunds: fbmData.refunds,
-    taxCollected: metrics.taxCollected,
+    taxCollected: totalTax,
     shippingCredits: metrics.shippingCredits,
     giftwrapCredits: metrics.giftwrapCredits,
     promotionalRebates: metrics.promotionalRebates,
@@ -155,13 +163,13 @@ export const convertMetricsToPL = (metrics: AggregatedMetrics): PLResult => {
     reimbursementLost: metrics.reimbursementLost,
     reimbursementDamaged: metrics.reimbursementDamaged,
     reimbursementOther: metrics.reimbursementOther,
-    totalFees: metrics.totalFees,
-    sellingFees: metrics.sellingFees,
-    fbaFeesTotal: metrics.fbaFees,
+    totalFees: totalFees,
+    sellingFees: Math.abs(metrics.sellingFees),
+    fbaFeesTotal: Math.abs(metrics.fbaFees),
     storageFees: metrics.storageFees,
     inboundFees: metrics.inboundFees,
     advertisingFees: metrics.advertisingFees,
-    otherFees: metrics.otherFees,
+    otherFees: Math.abs(metrics.otherFees),
     validTransactions: metrics.validTransactions,
     calculatedTotal: metrics.calculatedTotal,
     actualTotal: metrics.actualTotal
@@ -197,6 +205,7 @@ export const convertMetricsToPL = (metrics: AggregatedMetrics): PLResult => {
     
     const monthPL = generatePLFromData({
       grossSales: monthData.grossSales,
+      grossSalesWithTax: monthData.grossSales + monthTax, // Ventas CON IVA estimadas
       fbaGrossSales: monthFbaGrossSales,
       fbmGrossSales: monthFbmGrossSales,
       fbaFees: monthFbaFees,
@@ -245,7 +254,8 @@ export const convertMetricsToPL = (metrics: AggregatedMetrics): PLResult => {
 };
 
 interface PLInputData {
-  grossSales: number;
+  grossSales: number; // Ventas SIN IVA
+  grossSalesWithTax: number; // Ventas CON IVA
   fbaGrossSales: number;
   fbmGrossSales: number;
   fbaFees: number;
@@ -274,11 +284,14 @@ interface PLInputData {
 }
 
 const generatePLFromData = (data: PLInputData): PLMetrics => {
-  const totalRevenue = data.fbaGrossSales + data.fbmGrossSales;
+  // USAR valores directos, no recalcular
+  const totalProductSales = data.grossSales; // Ventas SIN IVA
+  const totalSalesWithTax = data.grossSalesWithTax; // Ventas CON IVA
   const totalTax = data.taxCollected;
+  const totalFees = data.totalFees; // Ya es valor absoluto
   
   // Calculate tax income (estimated at average tax rate)
-  const avgTaxRate = totalRevenue > 0 ? totalTax / totalRevenue : 0;
+  const avgTaxRate = totalProductSales > 0 ? totalTax / totalProductSales : 0;
   
   // FBA metrics
   const fbaTaxIncome = data.fbaGrossSales * avgTaxRate;
@@ -288,47 +301,48 @@ const generatePLFromData = (data: PLInputData): PLMetrics => {
   // FBM metrics
   const fbmTaxIncome = data.fbmGrossSales * avgTaxRate;
   const fbmTaxableIncome = data.fbmGrossSales - fbmTaxIncome;
-  const fbmPercentOfTotal = totalRevenue > 0 ? (data.fbmGrossSales / totalRevenue) * 100 : 0;
+  const fbmPercentOfTotal = totalProductSales > 0 ? (data.fbmGrossSales / totalProductSales) * 100 : 0;
 
-  // Sales commissions (typically ~15% referral)
-  const fbaSalesCommission = data.fbaFees * 0.45; // Referral portion of FBA fees
-  const fbmSalesCommission = data.fbmFees * 0.85; // Most FBM fees are referral
-  const refundCommissions = (data.fbaRefunds + data.fbmRefunds) * 0.15 * 0.5; // Partial refund of commission
-  const salesCommissionsTotal = fbaSalesCommission + fbmSalesCommission - refundCommissions;
-  const commissionPercent = totalRevenue > 0 ? (salesCommissionsTotal / totalRevenue) * 100 : 0;
+  // Sales commissions
+  const fbaSalesCommission = data.fbaFees * 0.45;
+  const fbmSalesCommission = data.fbmFees * 0.85;
+  const refundCommissions = (data.fbaRefunds + data.fbmRefunds) * 0.15 * 0.5;
+  const salesCommissionsTotal = data.sellingFees; // Usar valor real
+  const commissionPercent = totalProductSales > 0 ? (salesCommissionsTotal / totalProductSales) * 100 : 0;
 
   // FBA commissions (shipping/fulfillment)
-  const fbaShippingCommission = data.fbaFees * 0.55; // Fulfillment portion
-  const fbaShippingCredits = 0; // Usually credits come back
+  const fbaShippingCommission = data.fbaFeesTotal;
+  const fbaShippingCredits = 0;
 
   // Other expenses breakdown
-  const subscriptionFee = 39.99; // Pro seller subscription
+  const subscriptionFee = 39.99;
   const advertisingFee = data.advertisingFees;
   const storageFee = data.storageFees;
   const inboundFee = data.inboundFees;
   const otherExpensesTotal = data.otherFees + storageFee + inboundFee + data.regulatoryFees;
 
-  // Total expenses
-  const totalExpenses = data.totalFees;
+  // Total expenses - USAR valor directo
+  const totalExpenses = totalFees;
   const expensesPerSale = data.validTransactions > 0 ? totalExpenses / data.validTransactions : 0;
 
-  // EBITDA calculation
-  const grossProfit = totalRevenue - (data.fbaRefunds + data.fbmRefunds) + data.totalReimbursements;
-  const ebitda = grossProfit - totalExpenses;
-  const ebitdaPercent = totalRevenue > 0 ? (ebitda / totalRevenue) * 100 : 0;
+  // EBITDA calculation - Ventas CON IVA - Gastos = EBITDA
+  const totalRefunds = data.fbaRefunds + data.fbmRefunds;
+  const ebitda = totalSalesWithTax - totalFees - totalRefunds;
+  const ebitdaPercent = totalSalesWithTax > 0 ? (ebitda / totalSalesWithTax) * 100 : 0;
 
   // Taxes and net profit
-  const taxes = data.taxCollected;
-  const netProfit = ebitda - taxes;
-  const netProfitPercent = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+  const taxes = totalTax;
+  const netProfit = ebitda; // Sin restar impuestos adicionales
+  const netProfitPercent = totalSalesWithTax > 0 ? (netProfit / totalSalesWithTax) * 100 : 0;
 
   // Discrepancy check
-  const calculatedTotal = grossProfit - totalExpenses - taxes;
+  const calculatedTotal = totalSalesWithTax - totalFees;
   const mistake = data.calculatedTotal - data.actualTotal;
 
   return {
-    totalIncome: totalRevenue + data.shippingCredits + data.giftwrapCredits + data.totalReimbursements,
-    excludingTaxes: totalRevenue - totalTax + data.totalReimbursements,
+    // Total Income = Ventas CON IVA + otros ingresos
+    totalIncome: totalSalesWithTax + data.shippingCredits + data.giftwrapCredits + data.totalReimbursements,
+    excludingTaxes: totalProductSales + data.totalReimbursements, // Ventas SIN IVA + reembolsos
 
     fbm: {
       totalRevenue: data.fbmGrossSales,
