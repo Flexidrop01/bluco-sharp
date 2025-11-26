@@ -105,9 +105,19 @@ export const PLDashboard = ({ metrics, currency, period, monthlyData }: PLDashbo
     return aggregated;
   }, [filteredMonthlyData, metrics, startMonth, endMonth]);
 
+  // Usar el símbolo de moneda correcto (€ para EUR, $ para USD, etc.)
+  const getCurrencySymbol = () => {
+    if (currency === 'EUR') return '€';
+    if (currency === 'GBP') return '£';
+    if (currency === 'USD') return '$';
+    return '€'; // Default to EUR
+  };
+  
+  const currencySymbol = getCurrencySymbol();
+  
   const formatCurrency = (value: number) => {
-    const formatted = Math.abs(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    return value < 0 ? `-$${formatted}` : `$${formatted}`;
+    const formatted = Math.abs(value).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return value < 0 ? `-${currencySymbol}${formatted}` : `${currencySymbol}${formatted}`;
   };
 
   const formatPercent = (value: number) => {

@@ -1,5 +1,5 @@
-import { AggregatedMetrics, CountryAggregates } from '@/lib/massiveFileProcessor';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { AggregatedMetrics } from '@/lib/massiveFileProcessor';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Globe, TrendingUp, TrendingDown, ShoppingCart } from 'lucide-react';
 import { CURRENCY_INFO } from '@/lib/columnMappings';
@@ -17,10 +17,19 @@ const CountryBreakdownV2 = ({ metrics }: CountryBreakdownV2Props) => {
 
   const formatPercent = (value: number) => `${value.toFixed(1)}%`;
 
-  // Convert Map to array and sort by salesWithTax
+  // IMPORTANTE: Usar los totales GLOBALES de metrics (los mismos que el resumen ejecutivo)
+  const totalProductSales = metrics.productSales; // Ventas SIN IVA
+  const totalSalesWithTax = metrics.salesWithTax; // Ventas CON IVA  
+  const totalFees = metrics.totalFees; // Gastos (ya negativos)
+
+  // Convert Map to array and sort by contribution
   const countries = Array.from(metrics.byCountry.entries())
     .map(([key, data]) => ({ key, ...data }))
-    .sort((a, b) => b.salesWithTax - a.salesWithTax);
+    .sort((a, b) => b.productSales - a.productSales);
+
+  // Si solo hay un país, sus datos DEBEN coincidir con los globales
+  // Si hay múltiples países, mostrar proporciones relativas
+  const isSingleCountry = countries.length === 1;
 
   const getCountryFlag = (country: string) => {
     const flagMap: Record<string, string> = {
@@ -38,14 +47,9 @@ const CountryBreakdownV2 = ({ metrics }: CountryBreakdownV2Props) => {
     return flagMap[country] || '🌍';
   };
 
-  // Totales globales para comparación
-  const totalSalesWithTax = metrics.salesWithTax;
-  const totalProductSales = metrics.productSales;
-  const totalFees = Math.abs(metrics.totalFees);
-
   return (
     <div className="space-y-6">
-      {/* Header con totales globales */}
+      {/* Header con totales globales - SIEMPRE usa los datos de metrics (resumen ejecutivo) */}
       <Card className="glass-card border-primary/20">
         <CardContent className="p-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -59,7 +63,7 @@ const CountryBreakdownV2 = ({ metrics }: CountryBreakdownV2Props) => {
             </div>
             <div className="text-center">
               <p className="text-xs text-muted-foreground mb-1">Gastos Totales</p>
-              <p className="text-xl font-bold text-status-critical">{formatCurrency(-totalFees)}</p>
+              <p className="text-xl font-bold text-status-critical">{formatCurrency(totalFees)}</p>
             </div>
             <div className="text-center">
               <p className="text-xs text-muted-foreground mb-1">Países</p>
@@ -86,11 +90,20 @@ const CountryBreakdownV2 = ({ metrics }: CountryBreakdownV2Props) => {
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-4">
-          {countries.map((country) => {
-            const ebitda = country.salesWithTax + country.fees; // fees ya son negativos
-            const ebitdaMargin = country.salesWithTax > 0 ? (ebitda / country.salesWithTax) * 100 : 0;
-            const feePercent = country.salesWithTax > 0 ? (Math.abs(country.fees) / country.salesWithTax) * 100 : 0;
-            const contributionPercent = totalSalesWithTax > 0 ? (country.salesWithTax / totalSalesWithTax) * 100 : 0;
+          {countries.map((country, index) => {
+            // Si hay un solo país, usar los valores globales para evitar discrepancias
+            const countryProductSales = isSingleCountry ? totalProductSales : country.productSales;
+            const countrySalesWithTax = isSingleCountry ? totalSalesWithTax : country.salesWithTax;
+            const countryFees = isSingleCountry ? totalFees : country.fees;
+            const countrySellingFees = isSingleCountry ? metrics.sellingFees : country.sellingFees;
+            const countryFbaFees = isSingleCountry ? metrics.fbaFees : country.fbaFees;
+            const countryOtherFees = isSingleCountry ? metrics.otherFees : country.otherFees;
+            const countryRefunds = isSingleCountry ? metrics.totalRefunds : country.refunds;
+
+            const ebitda = countrySalesWithTax + countryFees; // fees ya son negativos
+            const ebitdaMargin = countrySalesWithTax > 0 ? (ebitda / countrySalesWithTax) * 100 : 0;
+            const feePercent = countrySalesWithTax > 0 ? (Math.abs(countryFees) / countrySalesWithTax) * 100 : 0;
+            const contributionPercent = isSingleCountry ? 100 : (totalSalesWithTax > 0 ? (countrySalesWithTax / totalSalesWithTax) * 100 : 0);
             
             return (
               <Card key={country.key} className="glass-card hover:border-primary/30 transition-colors">
@@ -115,7 +128,7 @@ const CountryBreakdownV2 = ({ metrics }: CountryBreakdownV2Props) => {
                         <TrendingUp className="w-3 h-3 text-muted-foreground" />
                         <p className="text-xs text-muted-foreground">Ventas SIN IVA</p>
                       </div>
-                      <p className="text-lg font-bold">{formatCurrency(country.productSales, country.currency)}</p>
+                      <p className="text-lg font-bold">{formatCurrency(countryProductSales, country.currency)}</p>
                     </div>
                     
                     <div className="bg-primary/10 rounded-lg p-3 border border-primary/20">
@@ -123,7 +136,7 @@ const CountryBreakdownV2 = ({ metrics }: CountryBreakdownV2Props) => {
                         <ShoppingCart className="w-3 h-3 text-primary" />
                         <p className="text-xs text-primary">Ventas CON IVA</p>
                       </div>
-                      <p className="text-lg font-bold text-primary">{formatCurrency(country.salesWithTax, country.currency)}</p>
+                      <p className="text-lg font-bold text-primary">{formatCurrency(countrySalesWithTax, country.currency)}</p>
                     </div>
                     
                     <div className="bg-status-critical/10 rounded-lg p-3 border border-status-critical/20">
@@ -131,7 +144,7 @@ const CountryBreakdownV2 = ({ metrics }: CountryBreakdownV2Props) => {
                         <TrendingDown className="w-3 h-3 text-status-critical" />
                         <p className="text-xs text-status-critical">Gastos</p>
                       </div>
-                      <p className="text-lg font-bold text-status-critical">{formatCurrency(country.fees, country.currency)}</p>
+                      <p className="text-lg font-bold text-status-critical">{formatCurrency(countryFees, country.currency)}</p>
                       <p className="text-xs text-muted-foreground">{formatPercent(feePercent)}</p>
                     </div>
                     
@@ -148,15 +161,15 @@ const CountryBreakdownV2 = ({ metrics }: CountryBreakdownV2Props) => {
                   <div className="grid grid-cols-3 gap-2 pt-3 border-t border-border/50">
                     <div className="text-center">
                       <p className="text-xs text-muted-foreground">Tarifas venta</p>
-                      <p className="text-sm font-medium">{formatCurrency(country.sellingFees, country.currency)}</p>
+                      <p className="text-sm font-medium">{formatCurrency(countrySellingFees, country.currency)}</p>
                     </div>
                     <div className="text-center">
                       <p className="text-xs text-muted-foreground">FBA Fees</p>
-                      <p className="text-sm font-medium">{formatCurrency(country.fbaFees, country.currency)}</p>
+                      <p className="text-sm font-medium">{formatCurrency(countryFbaFees, country.currency)}</p>
                     </div>
                     <div className="text-center">
                       <p className="text-xs text-muted-foreground">Otros</p>
-                      <p className="text-sm font-medium">{formatCurrency(country.otherFees, country.currency)}</p>
+                      <p className="text-sm font-medium">{formatCurrency(countryOtherFees, country.currency)}</p>
                     </div>
                   </div>
 
@@ -164,8 +177,8 @@ const CountryBreakdownV2 = ({ metrics }: CountryBreakdownV2Props) => {
                   <div className="flex items-center justify-between mt-3 pt-3 border-t border-border/50 text-xs text-muted-foreground">
                     <span>{country.orderCount.toLocaleString()} pedidos</span>
                     <span>{country.transactionCount.toLocaleString()} transacciones</span>
-                    {country.refunds > 0 && (
-                      <span className="text-status-warning">Reembolsos: {formatCurrency(country.refunds, country.currency)}</span>
+                    {countryRefunds > 0 && (
+                      <span className="text-status-warning">Reembolsos: {formatCurrency(countryRefunds, country.currency)}</span>
                     )}
                   </div>
                 </CardContent>
