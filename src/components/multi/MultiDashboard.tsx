@@ -93,51 +93,73 @@ const MultiDashboard = ({ analysis, rawMetrics, plResult, ceoBrainPL, onReset }:
       {/* Global Summary Metrics */}
       <GlobalSummary global={analysis.global} fileCount={analysis.fileCount} />
 
-      {/* Main Tabs */}
-      <Tabs defaultValue="countries" className="space-y-4">
-        <TabsList className="glass-card p-1 w-full justify-start overflow-x-auto flex-wrap">
-          <TabsTrigger value="countries" className="flex items-center gap-2">
-            <Globe className="w-4 h-4" />
-            <span className="hidden sm:inline">Por País</span>
-          </TabsTrigger>
-          <TabsTrigger value="demographic" className="flex items-center gap-2">
-            <MapPin className="w-4 h-4" />
-            <span className="hidden sm:inline">Demográfico</span>
-          </TabsTrigger>
-          <TabsTrigger value="transactions" className="flex items-center gap-2">
-            <Receipt className="w-4 h-4" />
-            <span className="hidden sm:inline">Transacciones</span>
-          </TabsTrigger>
-          <TabsTrigger value="skus" className="flex items-center gap-2">
-            <Package className="w-4 h-4" />
-            SKUs
-          </TabsTrigger>
-          <TabsTrigger value="fees" className="flex items-center gap-2">
-            <BarChart3 className="w-4 h-4" />
-            Fees
-          </TabsTrigger>
-          <TabsTrigger value="pl" className="flex items-center gap-2">
-            <Calculator className="w-4 h-4" />
-            <span className="hidden sm:inline">P&L</span>
-          </TabsTrigger>
-          <TabsTrigger value="ceobrain" className="flex items-center gap-2 bg-primary/10">
-            <Brain className="w-4 h-4 text-primary" />
-            <span className="hidden sm:inline">CEO Brain P&L</span>
-          </TabsTrigger>
-          <TabsTrigger value="alerts" className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4" />
-            Alertas
-            {analysis.alerts.filter(a => a.severity === 'critical').length > 0 && (
-              <Badge className="bg-status-critical text-white ml-1">
-                {analysis.alerts.filter(a => a.severity === 'critical').length}
-              </Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="actions" className="flex items-center gap-2">
-            <Target className="w-4 h-4" />
-            Acciones
-          </TabsTrigger>
-        </TabsList>
+      {/* Main Tabs - Improved UX */}
+      <Tabs defaultValue="countries" className="space-y-6">
+        <div className="sticky top-0 z-10 -mx-4 px-4 py-2 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <TabsList className="glass-card p-1.5 w-full grid grid-cols-4 md:grid-cols-8 gap-1 h-auto">
+            <TabsTrigger 
+              value="countries" 
+              className="flex flex-col items-center gap-1 py-2 px-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+            >
+              <Globe className="w-4 h-4" />
+              <span className="text-[10px] font-medium">País</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="demographic" 
+              className="flex flex-col items-center gap-1 py-2 px-2 data-[state=active]:bg-multi data-[state=active]:text-white"
+            >
+              <MapPin className="w-4 h-4" />
+              <span className="text-[10px] font-medium">Demográfico</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="transactions" 
+              className="flex flex-col items-center gap-1 py-2 px-2 data-[state=active]:bg-amazon-orange data-[state=active]:text-white"
+            >
+              <Receipt className="w-4 h-4" />
+              <span className="text-[10px] font-medium">Transacciones</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="skus" 
+              className="flex flex-col items-center gap-1 py-2 px-2 data-[state=active]:bg-idq data-[state=active]:text-white"
+            >
+              <Package className="w-4 h-4" />
+              <span className="text-[10px] font-medium">SKUs</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="fees" 
+              className="flex flex-col items-center gap-1 py-2 px-2 data-[state=active]:bg-cfo data-[state=active]:text-white"
+            >
+              <BarChart3 className="w-4 h-4" />
+              <span className="text-[10px] font-medium">Fees</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="pl" 
+              className="flex flex-col items-center gap-1 py-2 px-2 data-[state=active]:bg-status-success data-[state=active]:text-white"
+            >
+              <Calculator className="w-4 h-4" />
+              <span className="text-[10px] font-medium">P&L</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="ceobrain" 
+              className="flex flex-col items-center gap-1 py-2 px-2 bg-primary/10 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+            >
+              <Brain className="w-4 h-4" />
+              <span className="text-[10px] font-medium">CEO Brain</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="alerts" 
+              className="flex flex-col items-center gap-1 py-2 px-2 data-[state=active]:bg-status-critical data-[state=active]:text-white relative"
+            >
+              <AlertTriangle className="w-4 h-4" />
+              <span className="text-[10px] font-medium">Alertas</span>
+              {analysis.alerts.filter(a => a.severity === 'critical').length > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-status-critical text-white text-[8px] rounded-full flex items-center justify-center">
+                  {analysis.alerts.filter(a => a.severity === 'critical').length}
+                </span>
+              )}
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="countries">
           {rawMetrics ? (

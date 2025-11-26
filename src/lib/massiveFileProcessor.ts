@@ -112,16 +112,28 @@ export interface CountryAggregates {
   country: string;
   marketplace: string;
   currency: string;
-  grossSales: number;
+  // Ingresos desglosados
+  productSales: number;           // Ventas SIN IVA
+  productSalesTax: number;        // IVA de ventas
+  salesWithTax: number;           // Ventas CON IVA
+  totalIncome: number;            // Todos los ingresos (con envíos, promos, etc.)
+  grossSales: number;             // Alias para compatibilidad
   grossSalesUSD: number;
+  // Gastos
   fees: number;
   feePercent: number;
+  sellingFees: number;
+  fbaFees: number;
+  otherFees: number;
+  // Reembolsos
   refunds: number;
   refundRate: number;
   reimbursements: number;
+  // Calculados
   netSales: number;
   ebitda: number;
   transactionCount: number;
+  orderCount: number;
   topCities: Map<string, number>;
 }
 
@@ -173,16 +185,24 @@ export interface CityAggregates {
   region: string;
   postalCode: string;
   country: string;
-  grossSales: number;
+  productSales: number;           // Ventas SIN IVA
+  salesWithTax: number;           // Ventas CON IVA
+  grossSales: number;             // Alias para compatibilidad
+  fees: number;
   transactionCount: number;
+  orderCount: number;
   topSKUs: Map<string, number>;
 }
 
 export interface RegionAggregates {
   region: string;
   country: string;
-  grossSales: number;
+  productSales: number;           // Ventas SIN IVA
+  salesWithTax: number;           // Ventas CON IVA
+  grossSales: number;             // Alias para compatibilidad
+  fees: number;
   transactionCount: number;
+  orderCount: number;
   cities: Set<string>;
 }
 
@@ -437,18 +457,54 @@ const processRow = (
         country: marketplaceInfo.country || marketplace,
         marketplace,
         currency,
-        grossSales: 0, grossSalesUSD: 0, fees: 0, feePercent: 0,
-        refunds: 0, refundRate: 0, reimbursements: 0, netSales: 0,
-        ebitda: 0, transactionCount: 0, topCities: new Map()
+        productSales: 0,
+        productSalesTax: 0,
+        salesWithTax: 0,
+        totalIncome: 0,
+        grossSales: 0, 
+        grossSalesUSD: 0, 
+        fees: 0, 
+        feePercent: 0,
+        sellingFees: 0,
+        fbaFees: 0,
+        otherFees: 0,
+        refunds: 0, 
+        refundRate: 0, 
+        reimbursements: 0, 
+        netSales: 0,
+        ebitda: 0, 
+        transactionCount: 0, 
+        orderCount: 0,
+        topCities: new Map()
       });
     }
     const marketplaceData = metrics.byCountry.get(marketplace)!;
-    if (!isRefund && productSales > 0) {
+    
+    // Acumular todos los valores (positivos y negativos)
+    const rowSalesWithTax = productSales + productSalesTax;
+    const rowTotalIncome = productSales + productSalesTax + shippingCredits + shippingCreditsTax +
+                          giftwrapCredits + giftwrapCreditsTax + promotionalRebates + promotionalRebatesTax;
+    
+    if (isRefund || productSales < 0) {
+      // Reembolso
+      marketplaceData.refunds += Math.abs(productSales + productSalesTax);
+    } else if (productSales > 0) {
+      // Venta normal
+      marketplaceData.productSales += productSales;
+      marketplaceData.productSalesTax += productSalesTax;
+      marketplaceData.salesWithTax += rowSalesWithTax;
+      marketplaceData.totalIncome += rowTotalIncome;
       marketplaceData.grossSales += productSales;
       marketplaceData.grossSalesUSD += productSales * exchangeRate;
+      marketplaceData.orderCount++;
     }
+    
+    // Fees (ya son negativos)
+    marketplaceData.sellingFees += sellingFees;
+    marketplaceData.fbaFees += fbaFees;
+    marketplaceData.otherFees += otherTransactionFees + otherFees;
     marketplaceData.fees += (sellingFees + fbaFees + otherTransactionFees + otherFees);
-    if (isRefund) marketplaceData.refunds += Math.abs(productSales);
+    
     marketplaceData.transactionCount++;
     if (city) marketplaceData.topCities.set(city, (marketplaceData.topCities.get(city) || 0) + Math.max(0, productSales));
   }
@@ -527,10 +583,30 @@ const processRow = (
   if (city && !isOtherMovement) {
     const cityKey = `${city}|${region}|${marketplace}`;
     if (!metrics.byCity.has(cityKey)) {
-      metrics.byCity.set(cityKey, { city, region: region || '', postalCode: postalCode || '', country: marketplace, grossSales: 0, transactionCount: 0, topSKUs: new Map() });
+      metrics.byCity.set(cityKey, { 
+        city, 
+        region: region || '', 
+        postalCode: postalCode || '', 
+        country: marketplace, 
+        productSales: 0,
+        salesWithTax: 0,
+        grossSales: 0, 
+        fees: 0,
+        transactionCount: 0, 
+        orderCount: 0,
+        topSKUs: new Map() 
+      });
     }
     const cityData = metrics.byCity.get(cityKey)!;
-    if (!isRefund && productSales > 0) cityData.grossSales += productSales;
+    const rowSalesWithTax = productSales + productSalesTax;
+    
+    if (!isRefund && productSales > 0) {
+      cityData.productSales += productSales;
+      cityData.salesWithTax += rowSalesWithTax;
+      cityData.grossSales += productSales;
+      cityData.orderCount++;
+    }
+    cityData.fees += (sellingFees + fbaFees + otherTransactionFees + otherFees);
     cityData.transactionCount++;
     if (sku) cityData.topSKUs.set(sku, (cityData.topSKUs.get(sku) || 0) + Math.max(0, productSales));
   }
@@ -539,10 +615,28 @@ const processRow = (
   if (region && !isOtherMovement) {
     const regionKey = `${region}|${marketplace}`;
     if (!metrics.byRegion.has(regionKey)) {
-      metrics.byRegion.set(regionKey, { region, country: marketplace, grossSales: 0, transactionCount: 0, cities: new Set() });
+      metrics.byRegion.set(regionKey, { 
+        region, 
+        country: marketplace, 
+        productSales: 0,
+        salesWithTax: 0,
+        grossSales: 0, 
+        fees: 0,
+        transactionCount: 0, 
+        orderCount: 0,
+        cities: new Set() 
+      });
     }
     const regionData = metrics.byRegion.get(regionKey)!;
-    if (!isRefund && productSales > 0) regionData.grossSales += productSales;
+    const rowSalesWithTax = productSales + productSalesTax;
+    
+    if (!isRefund && productSales > 0) {
+      regionData.productSales += productSales;
+      regionData.salesWithTax += rowSalesWithTax;
+      regionData.grossSales += productSales;
+      regionData.orderCount++;
+    }
+    regionData.fees += (sellingFees + fbaFees + otherTransactionFees + otherFees);
     regionData.transactionCount++;
     if (city) regionData.cities.add(city);
   }

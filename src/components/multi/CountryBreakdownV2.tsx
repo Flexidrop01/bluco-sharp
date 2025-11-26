@@ -1,7 +1,7 @@
 import { AggregatedMetrics, CountryAggregates } from '@/lib/massiveFileProcessor';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Globe, AlertTriangle } from 'lucide-react';
+import { Globe, TrendingUp, TrendingDown, ShoppingCart } from 'lucide-react';
 import { CURRENCY_INFO } from '@/lib/columnMappings';
 
 interface CountryBreakdownV2Props {
@@ -11,48 +11,70 @@ interface CountryBreakdownV2Props {
 const CountryBreakdownV2 = ({ metrics }: CountryBreakdownV2Props) => {
   const formatCurrency = (amount: number, currency: string = 'EUR') => {
     const info = CURRENCY_INFO[currency] || { symbol: '€' };
-    return `${info.symbol}${Math.abs(amount).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const sign = amount < 0 ? '-' : '';
+    return `${sign}${info.symbol}${Math.abs(amount).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
-  const getStatusBadge = (feePercent: number, refundRate: number) => {
-    if (feePercent > 35 || refundRate > 10) {
-      return { variant: 'destructive' as const, label: 'Crítico', color: 'text-status-critical' };
-    }
-    if (feePercent > 30 || refundRate > 7) {
-      return { variant: 'secondary' as const, label: 'Alerta', color: 'text-status-warning' };
-    }
-    return { variant: 'default' as const, label: 'OK', color: 'text-status-success' };
-  };
+  const formatPercent = (value: number) => `${value.toFixed(1)}%`;
 
-  // Convert Map to array and sort by grossSales
+  // Convert Map to array and sort by salesWithTax
   const countries = Array.from(metrics.byCountry.entries())
     .map(([key, data]) => ({ key, ...data }))
-    .sort((a, b) => b.grossSales - a.grossSales);
+    .sort((a, b) => b.salesWithTax - a.salesWithTax);
 
   const getCountryFlag = (country: string) => {
     const flagMap: Record<string, string> = {
-      'Spain': '🇪🇸',
-      'USA': '🇺🇸',
-      'UK': '🇬🇧',
-      'Germany': '🇩🇪',
-      'France': '🇫🇷',
-      'Italy': '🇮🇹',
-      'Canada': '🇨🇦',
-      'Mexico': '🇲🇽',
-      'Japan': '🇯🇵',
+      'Spain': '🇪🇸', 'España': '🇪🇸',
+      'USA': '🇺🇸', 'United States': '🇺🇸',
+      'UK': '🇬🇧', 'United Kingdom': '🇬🇧', 'Gran Bretaña': '🇬🇧',
+      'Germany': '🇩🇪', 'Alemania': '🇩🇪',
+      'France': '🇫🇷', 'Francia': '🇫🇷',
+      'Italy': '🇮🇹', 'Italia': '🇮🇹',
+      'Canada': '🇨🇦', 'Canadá': '🇨🇦',
+      'Mexico': '🇲🇽', 'México': '🇲🇽',
+      'Japan': '🇯🇵', 'Japón': '🇯🇵',
       'Australia': '🇦🇺',
     };
     return flagMap[country] || '🌍';
   };
 
+  // Totales globales para comparación
+  const totalSalesWithTax = metrics.salesWithTax;
+  const totalProductSales = metrics.productSales;
+  const totalFees = Math.abs(metrics.totalFees);
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* Header con totales globales */}
+      <Card className="glass-card border-primary/20">
+        <CardContent className="p-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="text-center">
+              <p className="text-xs text-muted-foreground mb-1">Ventas SIN IVA</p>
+              <p className="text-xl font-bold text-foreground">{formatCurrency(totalProductSales)}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs text-muted-foreground mb-1">Ventas CON IVA</p>
+              <p className="text-xl font-bold text-primary">{formatCurrency(totalSalesWithTax)}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs text-muted-foreground mb-1">Gastos Totales</p>
+              <p className="text-xl font-bold text-status-critical">{formatCurrency(-totalFees)}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs text-muted-foreground mb-1">Países</p>
+              <p className="text-xl font-bold">{countries.length}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Lista de países */}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold flex items-center gap-2">
           <Globe className="w-5 h-5 text-multi" />
-          Análisis por País
+          Desglose por Marketplace
         </h2>
-        <span className="text-sm text-muted-foreground">{countries.length} marketplaces</span>
       </div>
 
       {countries.length === 0 ? (
@@ -63,87 +85,88 @@ const CountryBreakdownV2 = ({ metrics }: CountryBreakdownV2Props) => {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4">
           {countries.map((country) => {
-            const status = getStatusBadge(country.feePercent, country.refundRate);
-            const ebitdaMargin = country.grossSales > 0 
-              ? (country.ebitda / country.grossSales) * 100 
-              : 0;
+            const ebitda = country.salesWithTax + country.fees; // fees ya son negativos
+            const ebitdaMargin = country.salesWithTax > 0 ? (ebitda / country.salesWithTax) * 100 : 0;
+            const feePercent = country.salesWithTax > 0 ? (Math.abs(country.fees) / country.salesWithTax) * 100 : 0;
+            const contributionPercent = totalSalesWithTax > 0 ? (country.salesWithTax / totalSalesWithTax) * 100 : 0;
             
             return (
-              <Card key={country.key} className="glass-card">
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <span className="text-2xl">{getCountryFlag(country.country)}</span>
-                      {country.country}
-                    </CardTitle>
-                    <Badge className={status.color}>{status.label}</Badge>
+              <Card key={country.key} className="glass-card hover:border-primary/30 transition-colors">
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <span className="text-3xl">{getCountryFlag(country.country)}</span>
+                      <div>
+                        <h3 className="font-semibold text-lg">{country.country}</h3>
+                        <p className="text-xs text-muted-foreground">{country.marketplace} • {country.currency}</p>
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="text-xs">
+                      {formatPercent(contributionPercent)} del total
+                    </Badge>
                   </div>
-                  <p className="text-xs text-muted-foreground">{country.marketplace} • {country.currency}</p>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Main Metrics */}
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="text-center p-2 rounded-lg bg-muted/30">
-                      <p className="text-xs text-muted-foreground">Ventas</p>
-                      <p className="text-lg font-bold text-foreground">
-                        {formatCurrency(country.grossSales, country.currency)}
-                      </p>
+
+                  {/* Métricas principales */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                    <div className="bg-muted/30 rounded-lg p-3">
+                      <div className="flex items-center gap-1 mb-1">
+                        <TrendingUp className="w-3 h-3 text-muted-foreground" />
+                        <p className="text-xs text-muted-foreground">Ventas SIN IVA</p>
+                      </div>
+                      <p className="text-lg font-bold">{formatCurrency(country.productSales, country.currency)}</p>
                     </div>
-                    <div className="text-center p-2 rounded-lg bg-muted/30">
-                      <p className="text-xs text-muted-foreground">Fees</p>
-                      <p className={`text-lg font-bold ${country.feePercent > 32 ? 'text-status-critical' : 'text-foreground'}`}>
-                        {country.feePercent.toFixed(1)}%
-                      </p>
+                    
+                    <div className="bg-primary/10 rounded-lg p-3 border border-primary/20">
+                      <div className="flex items-center gap-1 mb-1">
+                        <ShoppingCart className="w-3 h-3 text-primary" />
+                        <p className="text-xs text-primary">Ventas CON IVA</p>
+                      </div>
+                      <p className="text-lg font-bold text-primary">{formatCurrency(country.salesWithTax, country.currency)}</p>
                     </div>
-                    <div className="text-center p-2 rounded-lg bg-muted/30">
-                      <p className="text-xs text-muted-foreground">Devoluciones</p>
-                      <p className={`text-lg font-bold ${country.refundRate > 8 ? 'text-status-critical' : 'text-foreground'}`}>
-                        {country.refundRate.toFixed(1)}%
+                    
+                    <div className="bg-status-critical/10 rounded-lg p-3 border border-status-critical/20">
+                      <div className="flex items-center gap-1 mb-1">
+                        <TrendingDown className="w-3 h-3 text-status-critical" />
+                        <p className="text-xs text-status-critical">Gastos</p>
+                      </div>
+                      <p className="text-lg font-bold text-status-critical">{formatCurrency(country.fees, country.currency)}</p>
+                      <p className="text-xs text-muted-foreground">{formatPercent(feePercent)}</p>
+                    </div>
+                    
+                    <div className={`rounded-lg p-3 border ${ebitda >= 0 ? 'bg-status-success/10 border-status-success/20' : 'bg-status-critical/10 border-status-critical/20'}`}>
+                      <p className="text-xs text-muted-foreground mb-1">EBITDA</p>
+                      <p className={`text-lg font-bold ${ebitda >= 0 ? 'text-status-success' : 'text-status-critical'}`}>
+                        {formatCurrency(ebitda, country.currency)}
                       </p>
+                      <p className="text-xs text-muted-foreground">{formatPercent(ebitdaMargin)} margen</p>
                     </div>
                   </div>
 
-                  {/* Detailed Breakdown */}
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="flex justify-between p-2 bg-muted/20 rounded">
-                      <span className="text-muted-foreground">Ventas brutas:</span>
-                      <span className="font-medium">{formatCurrency(country.grossSales, country.currency)}</span>
+                  {/* Desglose de gastos */}
+                  <div className="grid grid-cols-3 gap-2 pt-3 border-t border-border/50">
+                    <div className="text-center">
+                      <p className="text-xs text-muted-foreground">Tarifas venta</p>
+                      <p className="text-sm font-medium">{formatCurrency(country.sellingFees, country.currency)}</p>
                     </div>
-                    <div className="flex justify-between p-2 bg-muted/20 rounded">
-                      <span className="text-muted-foreground">Fees totales:</span>
-                      <span className="font-medium text-status-critical">{formatCurrency(country.fees, country.currency)}</span>
+                    <div className="text-center">
+                      <p className="text-xs text-muted-foreground">FBA Fees</p>
+                      <p className="text-sm font-medium">{formatCurrency(country.fbaFees, country.currency)}</p>
                     </div>
-                    <div className="flex justify-between p-2 bg-muted/20 rounded">
-                      <span className="text-muted-foreground">Reembolsos:</span>
-                      <span className="font-medium text-status-warning">{formatCurrency(country.refunds, country.currency)}</span>
-                    </div>
-                    <div className="flex justify-between p-2 bg-muted/20 rounded">
-                      <span className="text-muted-foreground">Reembolsos:</span>
-                      <span className="font-medium text-status-success">{formatCurrency(country.reimbursements, country.currency)}</span>
+                    <div className="text-center">
+                      <p className="text-xs text-muted-foreground">Otros</p>
+                      <p className="text-sm font-medium">{formatCurrency(country.otherFees, country.currency)}</p>
                     </div>
                   </div>
 
-                  {/* EBITDA */}
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-multi/10 border border-multi/20">
-                    <div>
-                      <p className="text-xs text-multi font-medium">EBITDA</p>
-                      <p className="text-xl font-bold text-multi">
-                        {formatCurrency(country.ebitda, country.currency)}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs text-muted-foreground">Margen</p>
-                      <p className={`text-lg font-bold ${ebitdaMargin > 20 ? 'text-status-success' : ebitdaMargin > 10 ? 'text-status-warning' : 'text-status-critical'}`}>
-                        {ebitdaMargin.toFixed(1)}%
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Transaction count */}
-                  <div className="text-center text-xs text-muted-foreground">
-                    {country.transactionCount.toLocaleString()} transacciones
+                  {/* Footer con métricas adicionales */}
+                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-border/50 text-xs text-muted-foreground">
+                    <span>{country.orderCount.toLocaleString()} pedidos</span>
+                    <span>{country.transactionCount.toLocaleString()} transacciones</span>
+                    {country.refunds > 0 && (
+                      <span className="text-status-warning">Reembolsos: {formatCurrency(country.refunds, country.currency)}</span>
+                    )}
                   </div>
                 </CardContent>
               </Card>
