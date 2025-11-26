@@ -13,6 +13,8 @@ import CountryBreakdownV2 from './CountryBreakdownV2';
 import DemographicAnalysisV2 from './DemographicAnalysisV2';
 import SKURanking from './SKURanking';
 import TransactionBreakdownV2 from './TransactionBreakdownV2';
+import FeeBreakdown from './FeeBreakdown';
+import AlertsPanel from './AlertsPanel';
 import { PLDashboard } from './PLDashboard';
 import CEOBrainPLTable from './CEOBrainPLTable';
 import CEOPLDashboard from './CEOPLDashboard';
@@ -52,6 +54,25 @@ const MultiDashboard = ({ analysis, rawMetrics, plResult, ceoBrainPL, onReset }:
     }
   };
 
+  // Contar alertas críticas para el badge
+  const criticalAlerts = rawMetrics ? (() => {
+    let count = 0;
+    const ventasConIVA = rawMetrics.salesWithTax;
+    const gastosTotales = Math.abs(rawMetrics.totalFees);
+    const reembolsos = rawMetrics.totalRefunds;
+    const ebitda = rawMetrics.ebitda;
+    
+    const margenEbitda = ventasConIVA > 0 ? (ebitda / ventasConIVA) * 100 : 0;
+    const feePercent = ventasConIVA > 0 ? (gastosTotales / ventasConIVA) * 100 : 0;
+    const refundRate = ventasConIVA > 0 ? (reembolsos / ventasConIVA) * 100 : 0;
+    
+    if (margenEbitda < 0) count++;
+    if (feePercent > 40) count++;
+    if (refundRate > 10) count++;
+    
+    return count;
+  })() : 0;
+
   return (
     <div className="space-y-6 pb-12">
       {/* Header */}
@@ -90,8 +111,10 @@ const MultiDashboard = ({ analysis, rawMetrics, plResult, ceoBrainPL, onReset }:
         <CEOPLDashboard metrics={rawMetrics} />
       )}
 
-      {/* Global Summary Metrics */}
-      <GlobalSummary global={analysis.global} fileCount={analysis.fileCount} />
+      {/* Global Summary Metrics - Usando rawMetrics */}
+      {rawMetrics && (
+        <GlobalSummary metrics={rawMetrics} fileCount={analysis.fileCount} />
+      )}
 
       {/* Main Tabs - Improved UX */}
       <Tabs defaultValue="countries" className="space-y-6">
@@ -152,9 +175,9 @@ const MultiDashboard = ({ analysis, rawMetrics, plResult, ceoBrainPL, onReset }:
             >
               <AlertTriangle className="w-4 h-4" />
               <span className="text-[10px] font-medium">Alertas</span>
-              {analysis.alerts.filter(a => a.severity === 'critical').length > 0 && (
+              {criticalAlerts > 0 && (
                 <span className="absolute -top-1 -right-1 w-4 h-4 bg-status-critical text-white text-[8px] rounded-full flex items-center justify-center">
-                  {analysis.alerts.filter(a => a.severity === 'critical').length}
+                  {criticalAlerts}
                 </span>
               )}
             </TabsTrigger>
@@ -255,34 +278,16 @@ const MultiDashboard = ({ analysis, rawMetrics, plResult, ceoBrainPL, onReset }:
         </TabsContent>
 
         <TabsContent value="fees">
-          <Card className="glass-card">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Desglose de Fees por Tipo</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {analysis.byFeeType.map((fee) => (
-                  <div key={fee.feeType} className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium">{fee.feeType}</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-muted-foreground">
-                          ${fee.totalAmountUSD.toLocaleString()}
-                        </span>
-                        <Badge variant="outline">{fee.percentOfTotal.toFixed(0)}%</Badge>
-                      </div>
-                    </div>
-                    <div className="h-3 bg-muted rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-multi rounded-full transition-all"
-                        style={{ width: `${fee.percentOfTotal}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          {rawMetrics ? (
+            <FeeBreakdown metrics={rawMetrics} />
+          ) : (
+            <Card className="glass-card">
+              <CardContent className="p-8 text-center">
+                <BarChart3 className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">No hay datos de fees disponibles</p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="pl">
@@ -385,33 +390,16 @@ const MultiDashboard = ({ analysis, rawMetrics, plResult, ceoBrainPL, onReset }:
         </TabsContent>
 
         <TabsContent value="alerts">
-          <div className="space-y-4">
-            {analysis.alerts.map((alert, index) => (
-              <Card key={index} className={`glass-card border ${getSeverityColor(alert.severity)}`}>
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className={`w-5 h-5 flex-shrink-0 ${
-                      alert.severity === 'critical' ? 'text-status-critical' :
-                      alert.severity === 'warning' ? 'text-status-warning' : 'text-primary'
-                    }`} />
-                    <div className="flex-1 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Badge className={getSeverityColor(alert.severity)}>{alert.severity}</Badge>
-                        {alert.country && <Badge variant="outline">{alert.country}</Badge>}
-                      </div>
-                      <p className="text-sm font-medium">{alert.description}</p>
-                      {alert.difference !== undefined && (
-                        <p className="text-xs text-muted-foreground">
-                          Esperado: {alert.expectedValue} | Actual: {alert.actualValue} | Diferencia: {alert.difference}
-                        </p>
-                      )}
-                      <p className="text-sm text-multi">💡 {alert.recommendation}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          {rawMetrics ? (
+            <AlertsPanel metrics={rawMetrics} />
+          ) : (
+            <Card className="glass-card">
+              <CardContent className="p-8 text-center">
+                <AlertTriangle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">No hay datos para generar alertas</p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="actions">
