@@ -1,73 +1,95 @@
-import { MultiAnalysisResult } from '@/types/multiTransaction';
+import { AggregatedMetrics } from '@/lib/massiveFileProcessor';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { 
   DollarSign, TrendingUp, TrendingDown, Percent, 
-  Package, AlertTriangle, RefreshCw, Globe 
+  Package, AlertTriangle, RefreshCw, Globe, Euro
 } from 'lucide-react';
+import { CURRENCY_INFO } from '@/lib/columnMappings';
 
 interface GlobalSummaryProps {
-  global: MultiAnalysisResult['global'];
+  metrics: AggregatedMetrics;
   fileCount: number;
 }
 
-const GlobalSummary = ({ global, fileCount }: GlobalSummaryProps) => {
-  const formatUSD = (amount: number) => 
-    `$${amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+const GlobalSummary = ({ metrics, fileCount }: GlobalSummaryProps) => {
+  // Detectar moneda principal
+  const primaryCurrency = Array.from(metrics.currencies)[0] || 'EUR';
+  const currencyInfo = CURRENCY_INFO[primaryCurrency] || { symbol: '€' };
+  
+  const formatCurrency = (amount: number) => {
+    const sign = amount < 0 ? '-' : '';
+    return `${sign}${currencyInfo.symbol}${Math.abs(amount).toLocaleString('es-ES', { 
+      minimumFractionDigits: 2, 
+      maximumFractionDigits: 2 
+    })}`;
+  };
 
-  const metrics = [
+  const formatPercent = (value: number) => `${value.toFixed(1)}%`;
+
+  // Usar datos EXACTOS del procesador
+  const ventasSinIVA = metrics.productSales;
+  const ventasConIVA = metrics.salesWithTax;
+  const gastosTotales = Math.abs(metrics.totalFees);
+  const reembolsos = metrics.totalRefunds;
+  const ebitda = metrics.ebitda;
+  const margenEbitda = ventasConIVA > 0 ? (ebitda / ventasConIVA) * 100 : 0;
+  const feePercent = ventasConIVA > 0 ? (gastosTotales / ventasConIVA) * 100 : 0;
+  const refundRate = ventasConIVA > 0 ? (reembolsos / ventasConIVA) * 100 : 0;
+
+  const mainMetrics = [
     {
-      label: 'Ventas Totales',
-      value: formatUSD(global.totalSalesUSD),
+      label: 'Ventas SIN IVA',
+      value: formatCurrency(ventasSinIVA),
       icon: DollarSign,
+      color: 'text-foreground',
+      bg: 'bg-muted/50'
+    },
+    {
+      label: 'Ventas CON IVA',
+      value: formatCurrency(ventasConIVA),
+      icon: primaryCurrency === 'EUR' ? Euro : DollarSign,
       color: 'text-status-success',
       bg: 'bg-status-success/10'
     },
     {
-      label: 'Total Fees',
-      value: formatUSD(global.totalFeesUSD),
-      subValue: `${global.globalFeePercent.toFixed(1)}%`,
+      label: 'Gastos Totales',
+      value: formatCurrency(-gastosTotales),
+      subValue: formatPercent(feePercent),
       icon: Percent,
-      color: global.globalFeePercent > 30 ? 'text-status-critical' : 'text-status-warning',
-      bg: global.globalFeePercent > 30 ? 'bg-status-critical/10' : 'bg-status-warning/10'
+      color: 'text-status-critical',
+      bg: 'bg-status-critical/10'
     },
     {
-      label: 'Devoluciones',
-      value: formatUSD(global.totalRefundsUSD),
-      subValue: `${global.globalRefundRate.toFixed(1)}%`,
+      label: 'Reembolsos',
+      value: formatCurrency(reembolsos),
+      subValue: formatPercent(refundRate),
       icon: RefreshCw,
-      color: global.globalRefundRate > 8 ? 'text-status-critical' : 'text-status-warning',
-      bg: global.globalRefundRate > 8 ? 'bg-status-critical/10' : 'bg-status-warning/10'
+      color: refundRate > 8 ? 'text-status-critical' : 'text-status-warning',
+      bg: refundRate > 8 ? 'bg-status-critical/10' : 'bg-status-warning/10'
     },
     {
-      label: 'Reembolsos Amazon',
-      value: formatUSD(global.totalReimbursementsUSD),
-      icon: TrendingUp,
-      color: 'text-status-success',
-      bg: 'bg-status-success/10'
-    },
-    {
-      label: 'EBITDA Neto',
-      value: formatUSD(global.netProfitUSD),
-      subValue: `${global.profitMargin.toFixed(1)}% margen`,
-      icon: global.profitMargin > 15 ? TrendingUp : TrendingDown,
-      color: global.profitMargin > 15 ? 'text-multi' : 'text-status-warning',
-      bg: global.profitMargin > 15 ? 'bg-multi/10' : 'bg-status-warning/10',
+      label: 'EBITDA',
+      value: formatCurrency(ebitda),
+      subValue: `${formatPercent(margenEbitda)} margen`,
+      icon: ebitda > 0 ? TrendingUp : TrendingDown,
+      color: ebitda > 0 ? 'text-multi' : 'text-status-critical',
+      bg: ebitda > 0 ? 'bg-multi/10' : 'bg-status-critical/10',
       highlight: true
     }
   ];
 
   const statsCards = [
     { label: 'Archivos', value: fileCount, icon: Package },
-    { label: 'Países', value: global.countriesCount, icon: Globe },
-    { label: 'SKUs', value: global.skuCount, icon: Package },
-    { label: 'Transacciones', value: global.transactionCount.toLocaleString(), icon: RefreshCw }
+    { label: 'Países', value: metrics.byCountry.size, icon: Globe },
+    { label: 'SKUs', value: metrics.uniqueSKUs.size, icon: Package },
+    { label: 'Transacciones', value: metrics.validTransactions.toLocaleString(), icon: RefreshCw }
   ];
 
   return (
     <div className="space-y-6">
       {/* Main KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-        {metrics.map((metric) => (
+        {mainMetrics.map((metric) => (
           <Card 
             key={metric.label} 
             className={`glass-card ${metric.highlight ? 'border-multi/50 ring-1 ring-multi/30' : ''}`}
@@ -114,14 +136,14 @@ const GlobalSummary = ({ global, fileCount }: GlobalSummaryProps) => {
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Fee %</span>
-                <span className={global.globalFeePercent > 30 ? 'text-status-critical' : 'text-status-success'}>
-                  {global.globalFeePercent.toFixed(1)}%
+                <span className={feePercent > 30 ? 'text-status-critical' : 'text-status-success'}>
+                  {formatPercent(feePercent)}
                 </span>
               </div>
               <div className="h-2 bg-muted rounded-full overflow-hidden">
                 <div 
-                  className={`h-full rounded-full ${global.globalFeePercent > 30 ? 'bg-status-critical' : 'bg-status-success'}`}
-                  style={{ width: `${Math.min(global.globalFeePercent, 100)}%` }}
+                  className={`h-full rounded-full ${feePercent > 30 ? 'bg-status-critical' : 'bg-status-success'}`}
+                  style={{ width: `${Math.min(feePercent, 100)}%` }}
                 />
               </div>
               <p className="text-xs text-muted-foreground">Objetivo: &lt;28%</p>
@@ -130,14 +152,14 @@ const GlobalSummary = ({ global, fileCount }: GlobalSummaryProps) => {
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Refund Rate</span>
-                <span className={global.globalRefundRate > 8 ? 'text-status-critical' : 'text-status-success'}>
-                  {global.globalRefundRate.toFixed(1)}%
+                <span className={refundRate > 8 ? 'text-status-critical' : 'text-status-success'}>
+                  {formatPercent(refundRate)}
                 </span>
               </div>
               <div className="h-2 bg-muted rounded-full overflow-hidden">
                 <div 
-                  className={`h-full rounded-full ${global.globalRefundRate > 8 ? 'bg-status-critical' : 'bg-status-success'}`}
-                  style={{ width: `${Math.min(global.globalRefundRate * 5, 100)}%` }}
+                  className={`h-full rounded-full ${refundRate > 8 ? 'bg-status-critical' : 'bg-status-success'}`}
+                  style={{ width: `${Math.min(refundRate * 5, 100)}%` }}
                 />
               </div>
               <p className="text-xs text-muted-foreground">Objetivo: &lt;6%</p>
@@ -146,14 +168,14 @@ const GlobalSummary = ({ global, fileCount }: GlobalSummaryProps) => {
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Margen EBITDA</span>
-                <span className={global.profitMargin > 15 ? 'text-status-success' : 'text-status-warning'}>
-                  {global.profitMargin.toFixed(1)}%
+                <span className={margenEbitda > 15 ? 'text-status-success' : 'text-status-warning'}>
+                  {formatPercent(margenEbitda)}
                 </span>
               </div>
               <div className="h-2 bg-muted rounded-full overflow-hidden">
                 <div 
-                  className={`h-full rounded-full ${global.profitMargin > 15 ? 'bg-status-success' : 'bg-status-warning'}`}
-                  style={{ width: `${Math.min(global.profitMargin * 2, 100)}%` }}
+                  className={`h-full rounded-full ${margenEbitda > 15 ? 'bg-status-success' : 'bg-status-warning'}`}
+                  style={{ width: `${Math.min(Math.max(margenEbitda, 0) * 2, 100)}%` }}
                 />
               </div>
               <p className="text-xs text-muted-foreground">Objetivo: &gt;20%</p>
@@ -162,12 +184,12 @@ const GlobalSummary = ({ global, fileCount }: GlobalSummaryProps) => {
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Diversificación</span>
-                <span className="text-status-success">{global.countriesCount} países</span>
+                <span className="text-status-success">{metrics.byCountry.size} países</span>
               </div>
               <div className="h-2 bg-muted rounded-full overflow-hidden">
                 <div 
                   className="h-full rounded-full bg-multi"
-                  style={{ width: `${Math.min(global.countriesCount * 12, 100)}%` }}
+                  style={{ width: `${Math.min(metrics.byCountry.size * 12, 100)}%` }}
                 />
               </div>
               <p className="text-xs text-muted-foreground">Objetivo: 5+ países</p>
